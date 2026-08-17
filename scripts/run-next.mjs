@@ -18,10 +18,20 @@ const args = process.argv.slice(2);
 const flag = "--use-system-ca";
 const existing = process.env.NODE_OPTIONS ?? "";
 
+// The flag only exists on Node >= 22.15, and passing an unknown option is a
+// hard startup failure. CI builders don't intercept TLS, so skip it there
+// rather than risk breaking a deploy.
+const [major, minor] = process.versions.node.split(".").map(Number);
+const supportsFlag = major > 22 || (major === 22 && minor >= 15);
+const wanted =
+  supportsFlag &&
+  !process.env.CI &&
+  !process.env.VERCEL &&
+  process.env.JUNIPER_SKIP_SYSTEM_CA !== "1" &&
+  !existing.includes(flag);
+
 const env = { ...process.env };
-if (process.env.JUNIPER_SKIP_SYSTEM_CA !== "1" && !existing.includes(flag)) {
-  env.NODE_OPTIONS = `${existing} ${flag}`.trim();
-}
+if (wanted) env.NODE_OPTIONS = `${existing} ${flag}`.trim();
 
 // Resolve Next's CLI entry and run it under this Node binary. Spawning the
 // `next` shim through a shell would work too, but shell:true with arguments
