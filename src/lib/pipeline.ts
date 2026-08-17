@@ -15,6 +15,13 @@ import { scoreSignals } from "./scoring";
 import { collectSignals } from "./signals/registry";
 import type { Signal } from "./signals/types";
 
+/** Thrown when the pipeline runs before an ICP exists — a precondition, not a fault. */
+export class MissingProfileError extends Error {
+  constructor() {
+    super("No targeting profile yet. Add your website on the Setup tab first.");
+  }
+}
+
 export interface RunOptions {
   /** Restrict to specific provider ids. Omit to run every enabled provider. */
   providers?: string[];
@@ -68,9 +75,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
   } = opts;
 
   const profile = await getProfile();
-  if (!profile) {
-    throw new Error("No profile yet. Add your website on the Settings tab first.");
-  }
+  if (!profile) throw new MissingProfileError();
 
   const started = Date.now();
   const deadline = started + DEFAULT_BUDGET_MS;

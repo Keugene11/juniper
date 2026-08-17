@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { describeAiError } from "@/lib/claude";
-import { runPipeline, type RunOptions } from "@/lib/pipeline";
+import { MissingProfileError, runPipeline, type RunOptions } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +23,9 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ stats });
   } catch (err) {
+    if (err instanceof MissingProfileError) {
+      return NextResponse.json({ error: err.message }, { status: 400 });
+    }
     const { status, message } = describeAiError(err);
     return NextResponse.json({ error: message }, { status });
   }
