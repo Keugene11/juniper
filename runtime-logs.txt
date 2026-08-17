@@ -1,0 +1,31 @@
+﻿node.exe : Retrieving project…
+At C:\Users\Daniel\AppData\Roaming\npm\vercel.ps1:24 char:5
++     & "node$exe"  "$basedir/node_modules/vercel/dist/vc.js" $args
++     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Retrieving project…:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Resolving deployment "juniper-j1fepxjax-keugenes-projects.vercel.app"
+Streaming logs for deployment dpl_ArFvFJNwNhDVmXPE1qeMgU2fQC1g starting from 20:23:01.32
+
+waiting for new logs...
+20:23:18.23  🚫  GET  ---  juniper-eight.vercel.app     /
+---------------------------------------------------------
+Error [LibsqlError]: SQLITE_ERROR: no such table: signals
+    at l (.next/server/chunks/562.js:103:824)
+    at async q (.next/server/chunks/562.js:29:1085)
+    at async o (.next/server/app/page.js:2:14376) {
+  code: 'SQLITE_ERROR',
+  extendedCode: 'SQLITE_ERROR',
+  rawCode: 1,
+  digest: '2404709555',
+  [cause]: SqliteError: no such table: signals
+      at l (.next/server/chunks/562.js:103:824)
+      at async q (.next/server/chunks/562.js:29:1085)
+      at async o (.next/server/app/page.js:2:14376) {
+    code: 'SQLITE_ERROR',
+    rawCode: 1
+  }
+}
+
+waiting for new logs...

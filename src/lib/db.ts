@@ -109,8 +109,9 @@ export async function db(): Promise<Client> {
   if (ready) return ready;
 
   ready = (async () => {
+    let pending: Client;
     if (isRemote()) {
-      client = createClient({
+      pending = createClient({
         url: process.env.TURSO_DATABASE_URL!,
         authToken: process.env.TURSO_AUTH_TOKEN,
       });
@@ -118,10 +119,23 @@ export async function db(): Promise<Client> {
       // Only /tmp is writable on a serverless filesystem.
       const path = isEphemeral() ? "/tmp/juniper.db" : LOCAL_PATH;
       mkdirSync(dirname(path), { recursive: true });
-      client = createClient({ url: `file:${path}` });
+      pending = createClient({ url: `file:${path}` });
     }
-    for (const stmt of SCHEMA) await client.execute(stmt);
-    return client;
+
+    try {
+      for (const stmt of SCHEMA) await pending.execute(stmt);
+    } catch (err) {
+      // Let the next caller retry instead of caching a broken connection.
+      ready = null;
+      throw err;
+    }
+
+    // Publish only once the schema exists. Assigning `client` any earlier lets
+    // a concurrent caller take the `if (client)` fast path and query tables
+    // that have not been created yet — which is exactly what a page issuing
+    // two queries in parallel does on a cold database.
+    client = pending;
+    return pending;
   })();
 
   return ready;
