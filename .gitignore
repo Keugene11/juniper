@@ -11,3 +11,5 @@ tsconfig.tsbuildinfo
 
 .vercel
 .vercel
+runtime-logs.txt
+*.log
