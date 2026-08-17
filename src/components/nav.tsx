@@ -1,0 +1,61 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Radio, Send, SlidersHorizontal } from "lucide-react";
+
+const TABS = [
+  { href: "/", label: "Signals", Icon: Radio },
+  { href: "/leads", label: "Leads", Icon: Send },
+  { href: "/setup", label: "Setup", Icon: SlidersHorizontal },
+];
+
+export function Nav() {
+  const pathname = usePathname();
+
+  return (
+    <>
+      {/* Mobile: fixed bottom bar. Desktop: inline header. */}
+      <header className="hidden border-b border-line md:block">
+        <div className="mx-auto flex w-full max-w-3xl items-center gap-1 px-4 py-3">
+          <span className="mr-4 text-sm font-semibold tracking-tight">Juniper</span>
+          {TABS.map(({ href, label, Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`press flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm ${
+                  active ? "bg-ink text-paper" : "text-muted hover:bg-wash"
+                }`}
+              >
+                <Icon size={15} strokeWidth={2} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      </header>
+
+      <nav className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper/95 backdrop-blur md:hidden">
+        <div className="mx-auto flex max-w-3xl">
+          {TABS.map(({ href, label, Icon }) => {
+            const active = pathname === href;
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={`press flex flex-1 flex-col items-center gap-1 py-3 text-[11px] ${
+                  active ? "text-ink" : "text-muted"
+                }`}
+              >
+                <Icon size={19} strokeWidth={active ? 2.4 : 1.8} />
+                {label}
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
+  );
+}

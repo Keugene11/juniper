@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --color-ink: #0a0a0a;
+  --color-paper: #ffffff;
+  --color-line: #e7e7e7;
+  --color-muted: #6b6b6b;
+  --color-wash: #f6f6f6;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every interactive element gets this. */
+.press {
+  transition:
+    transform 120ms ease,
+    opacity 120ms ease,
+    background-color 120ms ease;
+}
+.press:active {
+  transform: scale(0.975);
+}
+.press:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.press:disabled:active {
+  transform: none;
+}
+
+.card {
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: var(--color-paper);
+}
+
+@keyframes spin-slow {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spinning {
+  animation: spin-slow 900ms linear infinite;
+}

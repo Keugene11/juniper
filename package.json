@@ -1,0 +1,30 @@
+{
+  "name": "juniper",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/run-next.mjs dev",
+    "build": "node scripts/run-next.mjs build",
+    "start": "node scripts/run-next.mjs start",
+    "typecheck": "tsc --noEmit",
+    "seed": "node --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/seed.ts",
+    "verify": "node --disable-warning=ExperimentalWarning --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
+    "@libsql/client": "^0.17.4",
+    "lucide-react": "^0.460.0",
+    "next": "^15.5.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "typescript": "^5.6.0"
+  }
+}
