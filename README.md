@@ -100,6 +100,42 @@ Implement `SignalProvider` in `src/lib/signals/` and add it to `PROVIDERS` in
 "there was nothing to find". `collectSignals` scopes the watchlist to your
 provider id automatically.
 
+## Deployment
+
+Live at **https://juniper-eight.vercel.app** (repo:
+`github.com/Keugene11/juniper`, Vercel project `keugenes-projects/juniper`).
+Pushes to `master` deploy automatically.
+
+Two environment variables are needed before it is fully functional:
+
+```bash
+# Unlocks ICP inference, lead scoring, and message generation.
+vercel env add ANTHROPIC_API_KEY production
+
+# Persistent storage. Without these the deployment writes to the function's
+# own /tmp: not shared between concurrent requests, wiped on every cold start.
+vercel env add TURSO_DATABASE_URL production
+vercel env add TURSO_AUTH_TOKEN production
+```
+
+To create the database (requires a browser login, so run it yourself):
+
+```bash
+irm get.tur.so/install.ps1 | iex     # Windows; or: brew install tursodatabase/tap/turso
+turso auth signup
+turso db create juniper
+turso db show juniper --url          # -> TURSO_DATABASE_URL
+turso db tokens create juniper       # -> TURSO_AUTH_TOKEN
+```
+
+Then `vercel deploy --prod` to pick up the new variables. The schema creates
+itself on first connection; no migration step.
+
+`maxDuration` on `/api/pipeline/run` is 60s, the Hobby ceiling. `runPipeline`
+keeps its own budget (`JUNIPER_RUN_BUDGET_MS`, default 50s) just under it and
+stops early rather than being killed mid-lead — a kill would leave a lead
+enriched with no copy written. On Pro, raise both together.
+
 ## Environment notes
 
 **TLS interception.** If your network runs an HTTPS-inspecting proxy, Node
@@ -114,9 +150,9 @@ verification degrades to 30%-confidence guesses rather than returning nothing.
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · Tailwind v4 · `node:sqlite` (Node 24
-built-in, so there is no native module to compile) · Claude Opus 5 via
-`@anthropic-ai/sdk`.
+Next.js 15 (App Router) · TypeScript · Tailwind v4 · libsql (`@libsql/client`)
+so the same schema runs against a local file in dev and hosted Turso in
+production · Claude Opus 5 via `@anthropic-ai/sdk`.
 
 All three model-backed stages use structured outputs (`output_config.format`),
 so responses are schema-valid JSON — no regex extraction, no retry-on-parse.
