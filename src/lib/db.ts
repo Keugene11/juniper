@@ -1,4 +1,9 @@
 import { createClient, type Client, type InValue } from "@libsql/client";
+import {
+  normaliseSuppression,
+  type Suppression,
+  type SuppressionKind,
+} from "./contacts";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -64,6 +69,10 @@ const SCHEMA = [
     email_source     TEXT,
     email_confidence INTEGER,
     status           TEXT NOT NULL DEFAULT 'scored',
+    contact_key      TEXT,
+    /* Why this lead was scored but never sequenced — a duplicate contact, a
+       suppression, or a cooldown. Null means it was not skipped. */
+    skip_reason      TEXT,
     outcome          TEXT NOT NULL DEFAULT 'none',
     outcome_at       TEXT,
     pushed_at        TEXT,
@@ -81,6 +90,14 @@ const SCHEMA = [
     scheduled_at TEXT NOT NULL,
     sent_at      TEXT,
     status       TEXT NOT NULL DEFAULT 'queued'
+  )`,
+  `CREATE TABLE IF NOT EXISTS suppressions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind       TEXT NOT NULL,
+    value      TEXT NOT NULL,
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, value)
   )`,
   `CREATE TABLE IF NOT EXISTS runs (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,6 +126,34 @@ const MIGRATIONS = [
   `ALTER TABLE leads ADD COLUMN outcome_at TEXT`,
   `ALTER TABLE leads ADD COLUMN pushed_at TEXT`,
   `ALTER TABLE leads ADD COLUMN push_result TEXT`,
+  `ALTER TABLE leads ADD COLUMN contact_key TEXT`,
+  `ALTER TABLE leads ADD COLUMN skip_reason TEXT`,
+  // Must follow the ADD COLUMN above rather than sitting in SCHEMA: on an
+  // existing database the column does not exist when SCHEMA runs, and indexing
+  // a missing column fails the whole initialiser.
+  `CREATE INDEX IF NOT EXISTS idx_leads_contact ON leads(contact_key)`,
+  // Backfill identities for leads that predate the column. Without this the
+  // first run after upgrading would happily re-sequence everyone contacted
+  // before it, because none of them would match a contact key.
+  //
+  // Mirrors `contactKey` in contacts.ts: email wins, then person-within-domain,
+  // then company. Converges after one pass — rows with nothing to key on are
+  // excluded by the WHERE rather than being retried on every cold start.
+  `UPDATE leads SET contact_key =
+     CASE
+       WHEN email IS NOT NULL AND trim(email) != ''
+         THEN 'email:' || lower(trim(email))
+       WHEN person_name IS NOT NULL AND trim(person_name) != ''
+         THEN 'person:' || lower(coalesce(
+                CASE WHEN domain LIKE 'www.%' THEN substr(domain, 5) ELSE domain END, ''))
+              || ':' || lower(trim(person_name))
+       ELSE 'company:' ||
+              lower(CASE WHEN domain LIKE 'www.%' THEN substr(domain, 5) ELSE domain END)
+     END
+   WHERE contact_key IS NULL
+     AND ( (email IS NOT NULL AND trim(email) != '')
+        OR (person_name IS NOT NULL AND trim(person_name) != '')
+        OR (domain IS NOT NULL AND trim(domain) != '') )`,
 ];
 
 export function isRemote(): boolean {
@@ -269,6 +314,40 @@ export async function addWatchlistEntry(e: Omit<WatchlistEntry, "id">): Promise<
 
 export async function removeWatchlistEntry(id: number): Promise<void> {
   await run("DELETE FROM watchlist WHERE id = ?", [id]);
+}
+
+// ------------------------------------------------------------ suppressions
+
+/**
+ * The "never contact these" list — customers, competitors, partners, anyone who
+ * asked to be left alone. Consulted by the contact gate before a sequence is
+ * written, so an entry added today stops tomorrow's run cold.
+ */
+export async function listSuppressions(): Promise<Suppression[]> {
+  const rows = await query("SELECT * FROM suppressions ORDER BY kind, value");
+  return rows.map((r) => ({
+    id: num(r.id),
+    kind: str(r.kind) as SuppressionKind,
+    value: str(r.value),
+    reason: str(r.reason),
+    createdAt: str(r.created_at),
+  }));
+}
+
+export async function addSuppression(
+  kind: SuppressionKind,
+  value: string,
+  reason: string,
+): Promise<void> {
+  await run(
+    `INSERT INTO suppressions (kind, value, reason, created_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(kind, value) DO UPDATE SET reason = excluded.reason`,
+    [kind, normaliseSuppression(kind, value), reason, now()],
+  );
+}
+
+export async function removeSuppression(id: number): Promise<void> {
+  await run("DELETE FROM suppressions WHERE id = ?", [id]);
 }
 
 export { query, run, str, nstr, num, nnum };

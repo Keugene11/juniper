@@ -1,5 +1,6 @@
 import {
   getProfile,
+  listSuppressions,
   listWatchlist,
   now,
   nnum,
@@ -9,11 +10,12 @@ import {
   run,
   str,
 } from "./db";
+import { contactKey, contactKeys, matchSuppression } from "./contacts";
 import { enrichEmail } from "./enrichment";
 import { generateSequence, scheduleFor } from "./messaging";
 import { outboundConfigured, pushLead, type PushOutcome } from "./outbound";
 import { isLeadOutcome, type LeadOutcome } from "./outcomes";
-import { scoreSignals } from "./scoring";
+import { scoreSignals, type ScoredSignal } from "./scoring";
 import { collectSignals } from "./signals/registry";
 import {
   freshness,
@@ -55,6 +57,11 @@ export interface RunOptions {
    * push writes to systems other people are looking at.
    */
   autoPush?: boolean;
+  /**
+   * Days before the same contact may be sequenced again. Defaults to
+   * JUNIPER_CONTACT_COOLDOWN_DAYS (30).
+   */
+  cooldownDays?: number;
 }
 
 export interface RunStats {
@@ -68,6 +75,12 @@ export interface RunStats {
   disqualified: number;
   enriched: number;
   sequencesWritten: number;
+  /** Qualified leads that resolved to a contact another lead already owns. */
+  deduped: number;
+  /** Blocked by the suppression list, a lost outcome, or a booked meeting. */
+  suppressed: number;
+  /** Blocked because the same contact was sequenced inside the cooldown. */
+  cooledDown: number;
   /** Leads sent to at least one outbound destination successfully. */
   pushed: number;
   providerErrors: { provider: string; error: string }[];
@@ -102,6 +115,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     channel = "email",
     perProviderLimit = 12,
     autoPush = process.env.JUNIPER_AUTO_PUSH === "1",
+    cooldownDays = DEFAULT_COOLDOWN_DAYS,
   } = opts;
 
   const profile = await getProfile();
@@ -122,6 +136,9 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     disqualified: 0,
     enriched: 0,
     sequencesWritten: 0,
+    deduped: 0,
+    suppressed: 0,
+    cooledDown: 0,
     pushed: 0,
     providerErrors: [],
     providerWarnings: [],
@@ -178,14 +195,16 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
       await run(
         `INSERT INTO leads
            (signal_id, company, domain, person_name, person_title,
-            fit_score, intent_score, total_score, rationale, disqualified, status, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            fit_score, intent_score, total_score, rationale, disqualified, status,
+            contact_key, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(signal_id) DO UPDATE SET
            fit_score = excluded.fit_score,
            intent_score = excluded.intent_score,
            total_score = excluded.total_score,
            rationale = excluded.rationale,
-           disqualified = excluded.disqualified`,
+           disqualified = excluded.disqualified,
+           contact_key = excluded.contact_key`,
         [
           signalId,
           s.signal.company,
@@ -198,15 +217,33 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
           s.rationale,
           s.disqualified ? 1 : 0,
           s.disqualified ? "disqualified" : "scored",
+          // Written at scoring time so the *next* run can see this contact even
+          // if this one never gets as far as enrichment.
+          contactKey({
+            email: null,
+            domain: s.signal.domain,
+            personName: s.signal.personName,
+          }),
           now(),
         ],
       );
     }
 
     // 3/4/5. Enrich and write copy for the survivors only -------------------
-    const shortlist = scored
-      .filter((s) => !s.disqualified && s.totalScore >= threshold)
-      .slice(0, maxOutreach);
+    //
+    // The contact gate runs *before* the maxOutreach slice, not after. Slicing
+    // first would let six signals for one company consume the whole run budget
+    // and produce a single sequence; gating first spends that budget on six
+    // distinct people.
+    const qualified = scored.filter((s) => !s.disqualified && s.totalScore >= threshold);
+    const gate = await gateContacts(qualified, cooldownDays);
+    stats.deduped = gate.deduped;
+    stats.suppressed = gate.suppressed;
+    stats.cooledDown = gate.cooledDown;
+    for (const [dedupeKey, reason] of gate.skipped) {
+      await recordSkip(dedupeKey, reason);
+    }
+    const shortlist = gate.allowed.slice(0, maxOutreach);
 
     for (const s of shortlist) {
       if (Date.now() > deadline) {
@@ -225,6 +262,28 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
         domain: s.signal.domain,
       });
       if (enrichment.email) stats.enriched++;
+
+      // Enrichment is the first point at which the mailbox is known, so the
+      // gate has to run a second time: a lead keyed by name last week and by
+      // address today is the same human, and a domain suppression is often only
+      // discoverable from the address.
+      if (enrichment.email) {
+        const late = await gateEnrichedContact(
+          { email: enrichment.email, domain: s.signal.domain, personName: s.signal.personName },
+          leadId,
+          cooldownDays,
+        );
+        if (late) {
+          await run("UPDATE leads SET email = ?, skip_reason = ? WHERE id = ?", [
+            enrichment.email,
+            late,
+            leadId,
+          ]);
+          if (late.startsWith("suppressed")) stats.suppressed++;
+          else stats.deduped++;
+          continue;
+        }
+      }
 
       await run(
         `UPDATE leads SET email = ?, email_source = ?, email_confidence = ?, status = ?
@@ -281,6 +340,251 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     );
     throw err;
   }
+}
+
+// ------------------------------------------------------------ contact gate
+
+/**
+ * Default quiet period before the same contact may be sequenced again. Thirty
+ * days matches the window the category treats as a fresh approach — long enough
+ * that a second message reads as a new conversation rather than a follow-up to
+ * one they already ignored.
+ */
+const DEFAULT_COOLDOWN_DAYS = Number(process.env.JUNIPER_CONTACT_COOLDOWN_DAYS ?? 30);
+
+export interface GateResult {
+  allowed: ScoredSignal[];
+  /** dedupeKey -> why it was skipped, for writing onto the lead row. */
+  skipped: [string, string][];
+  deduped: number;
+  suppressed: number;
+  cooledDown: number;
+}
+
+/**
+ * Decides which qualified signals may be written a sequence.
+ *
+ * Four ways to lose, in order of precedence:
+ *
+ *   1. The contact is on the suppression list.
+ *   2. A previous run already reached them and the cooldown has not expired.
+ *   3. They said no, or a meeting is already booked — cold outreach is over for
+ *      that contact regardless of how long ago it was.
+ *   4. A higher-scoring signal this run resolves to the same contact.
+ *
+ * Candidates arrive sorted by score (scoreSignals sorts descending), so the
+ * first claim on a contact key is always the strongest reason to reach out. The
+ * losers are recorded rather than dropped: the lead still exists and the Leads
+ * tab explains why it has no copy.
+ */
+export async function gateContacts(
+  candidates: ScoredSignal[],
+  cooldownDays: number = DEFAULT_COOLDOWN_DAYS,
+): Promise<GateResult> {
+  const out: GateResult = {
+    allowed: [],
+    skipped: [],
+    deduped: 0,
+    suppressed: 0,
+    cooledDown: 0,
+  };
+  if (candidates.length === 0) return out;
+
+  const suppressions = await listSuppressions();
+  const history = await contactHistory(
+    candidates.flatMap((s) =>
+      contactKeys({
+        email: null,
+        domain: s.signal.domain,
+        personName: s.signal.personName,
+      }),
+    ),
+  );
+
+  const cutoff = Date.now() - cooldownDays * 86_400_000;
+  /** Contact keys claimed by an earlier, higher-scoring candidate this run. */
+  const claimed = new Map<string, string>();
+
+  for (const s of candidates) {
+    const identity = {
+      email: null,
+      domain: s.signal.domain,
+      personName: s.signal.personName,
+    };
+    const keys = contactKeys(identity);
+
+    const suppression = matchSuppression(identity, suppressions);
+    if (suppression) {
+      out.skipped.push([
+        s.signal.dedupeKey,
+        `suppressed — ${suppression.kind} "${suppression.value}"` +
+          (suppression.reason ? ` (${suppression.reason})` : ""),
+      ]);
+      out.suppressed++;
+      continue;
+    }
+
+    const claimedBy = keys.map((k) => claimed.get(k)).find(Boolean);
+    if (claimedBy) {
+      out.skipped.push([
+        s.signal.dedupeKey,
+        `duplicate contact — a higher-scoring signal for ${claimedBy} was sequenced this run`,
+      ]);
+      out.deduped++;
+      continue;
+    }
+
+    const prior = keys.map((k) => history.get(k)).find(Boolean);
+    const blocked = prior ? blockedByHistory(prior, cutoff) : null;
+    if (blocked) {
+      out.skipped.push([s.signal.dedupeKey, blocked.reason]);
+      if (blocked.kind === "cooldown") out.cooledDown++;
+      else out.suppressed++;
+      continue;
+    }
+
+    // An unidentifiable contact (no domain, no person, no address) yields no
+    // keys. It is let through rather than dropped — it is still a real lead,
+    // and there is nothing for it to collide with.
+    for (const k of keys) claimed.set(k, s.signal.company);
+    out.allowed.push(s);
+  }
+
+  return out;
+}
+
+interface PriorContact {
+  leadId: number;
+  outcome: string;
+  /**
+   * When this contact was last reached. Drawn from the sequence we wrote *or*
+   * from an outcome recorded by hand — someone who marks a lead "contacted"
+   * after sending from their own inbox has reached that person just as surely
+   * as a generated sequence did, and the cooldown has to honour both or it
+   * silently under-counts the ones Juniper did not send itself.
+   */
+  contactedAt: string | null;
+}
+
+/** Why a prior lead for the same contact blocks this one, if it does. */
+function blockedByHistory(
+  prior: PriorContact,
+  cutoff: number,
+): { kind: "cooldown" | "outcome"; reason: string } | null {
+  if (prior.outcome === "lost") {
+    return {
+      kind: "outcome",
+      reason: `already contacted and marked lost (lead #${prior.leadId}) — not re-approached`,
+    };
+  }
+  if (prior.outcome === "meeting") {
+    return {
+      kind: "outcome",
+      reason: `a meeting is already booked (lead #${prior.leadId}) — cold outreach stops here`,
+    };
+  }
+  if (prior.contactedAt && Date.parse(prior.contactedAt) > cutoff) {
+    return {
+      kind: "cooldown",
+      reason:
+        `already contacted ${prior.contactedAt.slice(0, 10)} (lead #${prior.leadId}) — ` +
+        "inside the contact cooldown",
+    };
+  }
+  return null;
+}
+
+/**
+ * Most recent prior lead per contact key, in one query rather than one per
+ * candidate. A lead that was scored and never worked carries no contact date,
+ * so it does not start a cooldown.
+ */
+async function contactHistory(keys: string[]): Promise<Map<string, PriorContact>> {
+  const unique = [...new Set(keys)];
+  const out = new Map<string, PriorContact>();
+  if (unique.length === 0) return out;
+
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = await query(
+    `SELECT l.id, l.contact_key, l.outcome,
+            COALESCE(
+              (SELECT MIN(m.scheduled_at) FROM messages m WHERE m.lead_id = l.id),
+              CASE WHEN l.outcome != 'none' THEN l.outcome_at END
+            ) AS contacted_at
+     FROM leads l
+     WHERE l.contact_key IN (${placeholders})
+     ORDER BY l.created_at ASC`,
+    unique,
+  );
+
+  for (const r of rows) {
+    const key = nstr(r.contact_key);
+    if (!key) continue;
+    const prior: PriorContact = {
+      leadId: num(r.id),
+      outcome: str(r.outcome ?? "none"),
+      contactedAt: nstr(r.contacted_at),
+    };
+    const existing = out.get(key);
+    // A terminal outcome outranks a bare cooldown, and a sequenced lead
+    // outranks one that was only scored — so the strongest block wins rather
+    // than whichever row happened to sort last.
+    if (!existing || rank(prior) >= rank(existing)) out.set(key, prior);
+  }
+  return out;
+}
+
+const rank = (p: PriorContact) =>
+  p.outcome === "lost" || p.outcome === "meeting" ? 2 : p.contactedAt ? 1 : 0;
+
+/**
+ * The post-enrichment pass. Returns a skip reason, or null to proceed.
+ * Excludes the lead's own row, which by now exists and would otherwise look
+ * like a prior contact of itself.
+ */
+async function gateEnrichedContact(
+  identity: { email: string; domain: string | null; personName: string | null },
+  leadId: number,
+  cooldownDays: number,
+): Promise<string | null> {
+  const suppression = matchSuppression(identity, await listSuppressions());
+  if (suppression) {
+    return (
+      `suppressed — ${suppression.kind} "${suppression.value}"` +
+      (suppression.reason ? ` (${suppression.reason})` : "")
+    );
+  }
+
+  const emailKey = contactKey({ email: identity.email, domain: null, personName: null });
+  if (!emailKey) return null;
+
+  const rows = await query(
+    `SELECT l.id, l.contact_key, l.outcome,
+            COALESCE(
+              (SELECT MIN(m.scheduled_at) FROM messages m WHERE m.lead_id = l.id),
+              CASE WHEN l.outcome != 'none' THEN l.outcome_at END
+            ) AS contacted_at
+     FROM leads l
+     WHERE l.contact_key = ? AND l.id != ?
+     ORDER BY l.created_at DESC LIMIT 1`,
+    [emailKey, leadId],
+  );
+  if (rows.length === 0) return null;
+
+  const prior: PriorContact = {
+    leadId: num(rows[0].id),
+    outcome: str(rows[0].outcome ?? "none"),
+    contactedAt: nstr(rows[0].contacted_at),
+  };
+  const blocked = blockedByHistory(prior, Date.now() - cooldownDays * 86_400_000);
+  return blocked?.reason ?? null;
+}
+
+/** Notes on the lead why it was scored but never written to. */
+async function recordSkip(dedupeKey: string, reason: string): Promise<void> {
+  const signalId = await signalIdFor(dedupeKey);
+  if (!signalId) return;
+  await run("UPDATE leads SET skip_reason = ? WHERE signal_id = ?", [reason, signalId]);
 }
 
 // ------------------------------------------------------------------ helpers
@@ -359,6 +663,10 @@ export interface LeadView {
   emailSource: string | null;
   emailConfidence: number | null;
   status: string;
+  /** Stable identity for the person or company this lead addresses. */
+  contactKey: string | null;
+  /** Why this lead was scored but never sequenced. Null when it was not skipped. */
+  skipReason: string | null;
   /** What actually happened after you reached out. Set by hand from the UI. */
   outcome: LeadOutcome;
   outcomeAt: string | null;
@@ -458,6 +766,8 @@ export async function listLeads(
     emailSource: nstr(r.email_source),
     emailConfidence: nnum(r.email_confidence),
     status: str(r.status),
+    contactKey: nstr(r.contact_key),
+    skipReason: nstr(r.skip_reason),
     outcome: (isLeadOutcome(r.outcome) ? r.outcome : "none") as LeadOutcome,
     outcomeAt: nstr(r.outcome_at),
     pushedAt: nstr(r.pushed_at),

@@ -17,8 +17,9 @@ survived the cheap ones.
 | 1 | **Onboard** | Paste your URL. Juniper crawls `/`, `/about`, `/product`, `/pricing`, `/customers`, `/solutions`, strips them to text, and has Claude reverse-engineer what you sell, who buys it, and which public phrases to watch for. | 1 model call, once |
 | 2 | **Ingest** | Every enabled provider runs concurrently and normalises what it finds into a single `Signal` shape. Duplicates are rejected on a stable `dedupeKey`, and trigger types you did not select are dropped before anything is persisted. | free |
 | 3 | **Score** | Intent comes from the signal taxonomy and the event's age (deterministic, no model call). ICP fit needs judgement, so it goes to Claude — batched 25 signals per call. `total = 0.6·fit + 0.4·intent`. | 1 call / 25 signals |
-| 4 | **Enrich** | Email waterfall over the survivors above your score threshold. | 1 lookup / lead |
-| 5 | **Write** | A three-step sequence per lead, conditioned on that lead's specific trigger event. | 1 call / lead |
+| 4 | **Gate** | The survivors are reduced to one lead per *contact*: duplicates collapse, suppressed contacts drop out, and anyone reached recently waits. | free |
+| 5 | **Enrich** | Email waterfall over what the gate allowed. | 1 lookup / lead |
+| 6 | **Write** | A three-step sequence per lead, conditioned on that lead's specific trigger event. | 1 call / lead |
 
 Nothing is sent, so the sixth stage is a human one: mark on the Leads tab what
 actually happened, and the Activity tab reports reply rate per trigger type.
@@ -206,6 +207,61 @@ writes into systems other people are looking at, and nobody should discover that
 by running the pipeline for the first time. Set `JUNIPER_AUTO_PUSH=1` to push
 during a run instead.
 
+## The contact gate
+
+Juniper dedupes *signals* on `dedupeKey`, which stops the same event being
+ingested twice. That says nothing about people. One company firing a hiring
+spike and a funding round in the same run is two signals, two leads, and — until
+the gate existed — two sequences to the same inbox. Every serious tool in the
+category treats that as a first-order defect rather than a rough edge: it wastes
+sending capacity, annoys the recipient, and corrupts reply-rate reporting by
+inflating the denominator.
+
+`src/lib/contacts.ts` derives one key per contact, most specific first:
+
+| Available | Key | Effect |
+|-----------|-----|--------|
+| Email | `email:dana@acme.com` | Strongest — survives a name or company changing |
+| Domain + person | `person:acme.com:dana whitfield` | Two different people at one company both get worked |
+| Domain only | `company:acme.com` | Company-level signals (a hiring spike, a funding round) collapse |
+| Person only | `person::u/tester` | Reddit and other venues that publish no employer |
+
+Four ways a qualified lead loses the gate, in precedence order:
+
+1. **Suppressed** — on the never-contact list.
+2. **Cooldown** — the same contact was reached inside `JUNIPER_CONTACT_COOLDOWN_DAYS`
+   (default 30). "Reached" means a sequence we wrote *or* an outcome you marked
+   by hand, since sending from your own inbox reaches someone just as surely.
+3. **Terminal outcome** — marked lost, or a meeting is already booked. Cold
+   outreach stops there regardless of how long ago it was.
+4. **Duplicate** — a higher-scoring signal this run already claimed that contact.
+
+Candidates are gated in score order, so the winner is always the strongest
+reason to reach out. Losers are recorded rather than dropped: the lead still
+exists and its card says why it has no copy, because a considered decision and a
+bug look identical when neither is explained.
+
+The gate runs *before* the `maxOutreach` slice. Slicing first would let six
+signals for one company consume the whole run budget and produce one sequence;
+gating first spends that budget on six distinct people.
+
+Enrichment forces a second pass. The mailbox is only known after the waterfall
+runs, and a lead keyed by name last week is the same human as today's address —
+so the email key is re-checked against history and suppressions before any copy
+is written.
+
+### Never contact
+
+A list of domains, addresses, and names that never become leads: customers,
+competitors, partners, anyone who asked to be left alone. Managed on the Setup
+tab. Domain entries cover subdomains and addresses at that domain, so
+`acme.com` also blocks `eu.acme.com` and `dana@acme.com` — a customer you must
+not prospect is not less of a customer because their careers page lives on a
+subdomain. Pasted URLs are reduced to the host.
+
+The cost of getting this wrong is asymmetric. A missed lead is a missed lead;
+a cold pitch to a current customer is a conversation with your account manager.
+
 ## Outcomes and the Activity tab
 
 Juniper never sends anything, so it cannot observe what happened — you record it.
@@ -338,6 +394,12 @@ call rather than surfacing as an error.
   editing your positioning.
 - The Greenhouse, Lever, and Ashby providers need board handles; there is no
   public index of which companies use them, which is why the watchlist is manual.
+- The gate can only dedupe what it can identify. A signal with no domain, no
+  person, and no address yields no contact key and is let through — it is still
+  a real lead, and there is nothing for it to collide with.
+- Leads created before the gate existed are backfilled with a contact key on
+  first connection, so upgrading does not re-approach everyone you contacted
+  last month.
 - Reply rates on the Activity tab are only as good as the outcomes you record.
   Sequences you send and never mark contacted look, to the report, like leads you
   never worked.

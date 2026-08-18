@@ -151,6 +151,8 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
   );
 }
 
+const gateTotal = (s: RunStats) => s.deduped + s.suppressed + s.cooledDown;
+
 function RunSummary({ stats }: { stats: RunStats }) {
   const rows: [string, number][] = [
     ["Signals seen", stats.signalsFound],
@@ -179,6 +181,23 @@ function RunSummary({ stats }: { stats: RunStats }) {
         {stats.truncated &&
           " Stopped early to stay inside the request time budget — run again to continue."}
       </p>
+
+      {/* The gate is invisible when it works, so it reports itself: a run that
+          finds twenty signals and writes three sequences should say why. */}
+      {gateTotal(stats) > 0 && (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          Contact gate held back{" "}
+          {[
+            stats.deduped > 0 &&
+              `${stats.deduped} duplicate contact${stats.deduped === 1 ? "" : "s"}`,
+            stats.cooledDown > 0 && `${stats.cooledDown} inside the cooldown`,
+            stats.suppressed > 0 && `${stats.suppressed} suppressed`,
+          ]
+            .filter(Boolean)
+            .join(", ")}
+          . Each one is on the Leads tab with the reason.
+        </p>
+      )}
 
       {stats.providerErrors.length > 0 && (
         <ul className="mt-2 space-y-1 text-[11px] text-muted">

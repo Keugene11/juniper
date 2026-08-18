@@ -1,8 +1,9 @@
 import { Check, Minus } from "lucide-react";
 import { ProfileForm } from "@/components/profile-form";
+import { SuppressionManager } from "@/components/suppression-manager";
 import { WatchlistManager } from "@/components/watchlist-manager";
 import { PageHeader } from "@/components/ui";
-import { getProfile, isEphemeral, listWatchlist } from "@/lib/db";
+import { getProfile, isEphemeral, listSuppressions, listWatchlist } from "@/lib/db";
 import { enrichmentProviderStatus } from "@/lib/enrichment";
 import { outboundTargetStatus } from "@/lib/outbound";
 import { providerStatus } from "@/lib/signals/registry";
@@ -10,7 +11,11 @@ import { providerStatus } from "@/lib/signals/registry";
 export const dynamic = "force-dynamic";
 
 export default async function SetupPage() {
-  const [profile, watchlist] = await Promise.all([getProfile(), listWatchlist()]);
+  const [profile, watchlist, suppressions] = await Promise.all([
+    getProfile(),
+    listWatchlist(),
+    listSuppressions(),
+  ]);
   const enrichment = enrichmentProviderStatus();
   const sources = providerStatus();
   const outbound = outboundTargetStatus();
@@ -36,6 +41,7 @@ export default async function SetupPage() {
         )}
         <ProfileForm initial={profile} />
         <WatchlistManager initial={watchlist} />
+        <SuppressionManager initial={suppressions} />
 
         <section className="card p-4">
           <h2 className="text-sm font-semibold">Signal sources</h2>

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Mail, CircleAlert } from "lucide-react";
+import { Mail, CircleAlert, ShieldOff } from "lucide-react";
 import { OutcomeControl } from "@/components/outcome-control";
 import { PushControl } from "@/components/push-control";
 import {
@@ -104,6 +104,19 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
         <p className="mt-2 text-xs font-medium leading-snug">{lead.signal.headline}</p>
         <p className="mt-1 text-xs leading-relaxed text-muted">{lead.signal.evidence}</p>
       </div>
+
+      {/* A skipped lead was scored and deliberately not written to. Saying so on
+          the card is the difference between a considered decision and a bug. */}
+      {lead.skipReason && (
+        <div className="border-t border-line bg-wash/60 px-4 py-3">
+          <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted">
+            <ShieldOff size={12} className="mt-0.5 shrink-0" />
+            <span>
+              <span className="font-medium text-ink">No sequence written</span> — {lead.skipReason}
+            </span>
+          </p>
+        </div>
+      )}
 
       <div className="border-t border-line p-4">
         {lead.email ? (
