@@ -4,14 +4,30 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Play, Loader2, AlertCircle } from "lucide-react";
 import type { RunStats } from "@/lib/pipeline";
+import { SIGNAL_LABEL, SIGNAL_STRENGTH, type SignalKind } from "@/lib/signals/types";
 
-export function RunPanel({ ready }: { ready: boolean }) {
+/**
+ * Run configuration. The trigger picker is the important control: narrowing to
+ * the two or three event types that actually convert for you is what keeps
+ * scoring cheap, and it is the same choice the commercial tools put behind
+ * "pick your intent signals".
+ */
+export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[] }) {
   const router = useRouter();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<RunStats | null>(null);
   const [threshold, setThreshold] = useState(60);
   const [channel, setChannel] = useState<"email" | "linkedin">("email");
+  const [selected, setSelected] = useState<SignalKind[]>(kinds);
+
+  const allSelected = selected.length === kinds.length;
+
+  function toggle(kind: SignalKind) {
+    setSelected((prev) =>
+      prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind],
+    );
+  }
 
   async function run() {
     setRunning(true);
@@ -21,7 +37,14 @@ export function RunPanel({ ready }: { ready: boolean }) {
       const res = await fetch("/api/pipeline/run", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ threshold, channel, maxOutreach: 6 }),
+        body: JSON.stringify({
+          threshold,
+          channel,
+          maxOutreach: 6,
+          // Omitted when everything is on, so the server keeps its own default
+          // rather than being pinned to whatever the client happened to know about.
+          kinds: allSelected ? undefined : selected,
+        }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
@@ -36,7 +59,36 @@ export function RunPanel({ ready }: { ready: boolean }) {
 
   return (
     <div className="card p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+      <div className="flex items-baseline justify-between">
+        <span className="text-[11px] text-muted">Trigger events to watch</span>
+        <button
+          onClick={() => setSelected(allSelected ? [] : kinds)}
+          className="press text-[11px] underline"
+        >
+          {allSelected ? "Clear all" : "Select all"}
+        </button>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {kinds.map((kind) => {
+          const on = selected.includes(kind);
+          return (
+            <button
+              key={kind}
+              onClick={() => toggle(kind)}
+              aria-pressed={on}
+              title={`Peak intent weight ${SIGNAL_STRENGTH[kind]}`}
+              className={`press rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+                on ? "border-ink bg-ink text-paper" : "border-line text-muted"
+              }`}
+            >
+              {SIGNAL_LABEL[kind]}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-end">
         <label className="flex-1">
           <span className="text-[11px] text-muted">Score threshold</span>
           <input
@@ -67,7 +119,7 @@ export function RunPanel({ ready }: { ready: boolean }) {
 
         <button
           onClick={run}
-          disabled={running || !ready}
+          disabled={running || !ready || selected.length === 0}
           className="press flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-paper"
         >
           {running ? <Loader2 size={15} className="spinning" /> : <Play size={15} />}
@@ -78,6 +130,12 @@ export function RunPanel({ ready }: { ready: boolean }) {
       {!ready && (
         <p className="mt-3 text-xs text-muted">
           Add your website on the Setup tab first — the pipeline needs an ICP to score against.
+        </p>
+      )}
+
+      {ready && selected.length === 0 && (
+        <p className="mt-3 text-xs text-muted">
+          Select at least one trigger event. With none selected there is nothing to collect.
         </p>
       )}
 
@@ -115,6 +173,9 @@ function RunSummary({ stats }: { stats: RunStats }) {
       </div>
       <p className="mt-3 text-[11px] text-muted">
         Finished in {(stats.durationMs / 1000).toFixed(1)}s.
+        {stats.signalsFiltered > 0 &&
+          ` ${stats.signalsFiltered} dropped by the trigger filter before scoring.`}
+        {stats.pushed > 0 && ` ${stats.pushed} pushed to outbound destinations.`}
         {stats.truncated &&
           " Stopped early to stay inside the request time budget — run again to continue."}
       </p>

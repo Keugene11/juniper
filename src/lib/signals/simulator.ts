@@ -6,21 +6,35 @@ import type {
   SignalProvider,
 } from "./types";
 
+const KINDS: SignalKind[] = [
+  "competitor_engagement",
+  "job_change",
+  "pain_point_post",
+  "tech_adoption",
+  "funding_round",
+  "hiring_spike",
+  "event_rsvp",
+  "negative_review",
+];
+
 /**
  * Deterministic signal generator. Runs fully offline and is seeded on the day,
  * so re-running ingestion is idempotent (the dedupe keys repeat) while a new
  * day produces a fresh feed.
  *
  * Its job is to cover the person-level signal types that no public API exposes
- * — competitor engagement, job changes — so the scoring, enrichment, and
- * messaging stages can be exercised end to end without a paid data provider.
+ * — competitor engagement, job changes, event attendance — so the scoring,
+ * enrichment, and messaging stages can be exercised end to end without a paid
+ * data provider.
  */
 export const simulatorProvider: SignalProvider = {
   id: "simulator",
   label: "Simulator",
   description:
-    "Seeded synthetic signals covering the person-level types (competitor engagement, job changes) that no public API exposes.",
+    "Seeded synthetic signals covering the person-level types (competitor engagement, job changes, event RSVPs) that no public API exposes.",
   enabled: true,
+  requires: [],
+  kinds: KINDS,
 
   async fetch(ctx: ProviderContext): Promise<ProviderOutput> {
     const day = new Date().toISOString().slice(0, 10);
@@ -34,6 +48,12 @@ export const simulatorProvider: SignalProvider = {
       const title = pick(rand, TITLES);
       const kind = pick(rand, KINDS);
       const keyword = ctx.keywords.length ? pick(rand, ctx.keywords) : "your category";
+      // Backdated by up to three days so the decay curve has something to bite
+      // on: without a spread, every synthetic signal is equally hot and the
+      // freshness half of scoring is untestable.
+      const occurredAt = new Date(
+        Date.now() - Math.floor(rand() * 72) * 3_600_000,
+      ).toISOString();
 
       signals.push({
         provider: "simulator",
@@ -45,7 +65,8 @@ export const simulatorProvider: SignalProvider = {
         headline: headlineFor(kind, company.name, person, title, keyword),
         evidence: evidenceFor(kind, company.name, person, title, keyword),
         url: `https://${company.domain}`,
-        detectedAt: new Date(Date.now() - Math.floor(rand() * 72) * 3_600_000).toISOString(),
+        detectedAt: new Date().toISOString(),
+        occurredAt,
         dedupeKey: `sim:${day}:${i}:${company.domain}:${kind}`,
       });
     }
@@ -56,15 +77,6 @@ export const simulatorProvider: SignalProvider = {
     };
   },
 };
-
-const KINDS: SignalKind[] = [
-  "competitor_engagement",
-  "job_change",
-  "pain_point_post",
-  "tech_adoption",
-  "funding_round",
-  "hiring_spike",
-];
 
 const COMPANIES = [
   { name: "Northwind Logistics", domain: "northwind-logistics.com" },
@@ -115,6 +127,10 @@ function headlineFor(
       return `${company} adopted a tool adjacent to ${keyword}`;
     case "funding_round":
       return `${company} announced a new funding round`;
+    case "event_rsvp":
+      return `${person} (${title}, ${company}) registered for a webinar on ${keyword}`;
+    case "negative_review":
+      return `${person} publicly criticised their current ${keyword} tooling`;
     default:
       return `${company} is scaling its go-to-market team`;
   }
@@ -138,6 +154,10 @@ function evidenceFor(
       return `${company} added a tool that sits directly upstream of ${keyword}, which usually signals an active project in this area.`;
     case "funding_round":
       return `${company} announced new funding earmarked for go-to-market expansion, with ${person} named as ${title}.`;
+    case "event_rsvp":
+      return `${person} registered for a session on ${keyword} — attendance signals an active evaluation, and the window closes within a day or two of the event.`;
+    case "negative_review":
+      return `${person} wrote that their current ${keyword} vendor "still cannot do the one thing we bought it for" and asked what others had moved to.`;
     default:
       return `${company} opened several go-to-market roles this month, with ${person} (${title}) listed as the hiring manager.`;
   }

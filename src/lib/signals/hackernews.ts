@@ -1,3 +1,4 @@
+import { passesGate } from "./relevance";
 import {
   describeFetchError,
   type ProviderContext,
@@ -18,23 +19,16 @@ interface HnHit {
 }
 
 const RECENT_DAYS = 180;
-/**
- * Fraction of a watch term's content words that must actually appear. A watch
- * term is a phrase, so anything below 1.0 lets partial matches through — and a
- * partial match on "CRM data hygiene" is a story about "data", which is noise.
- */
-const RELEVANCE_FLOOR = 1;
 
 /**
  * Hacker News via the public Algolia index — the "someone posted about a pain
  * point you solve" and "company just raised / launched" half of the feed.
  *
- * Algolia ranks with loose OR matching, so a query like "CRM data hygiene"
- * happily returns a story that merely contains "data". Left unchecked that
- * feeds fabricated signals into scoring, so every hit is re-checked locally
- * against the term's own words before it is allowed through. Expect this
- * provider to be quiet for non-developer ICPs: HN simply has little to say
- * about most B2B categories, and silence is the correct output.
+ * Algolia ranks with loose OR matching, so every hit is re-checked locally
+ * against the term's own words (see `relevance.ts`) before it is allowed
+ * through. Expect this provider to be quiet for non-developer ICPs: HN simply
+ * has little to say about most B2B categories, and silence is the correct
+ * output.
  */
 export const hackerNewsProvider: SignalProvider = {
   id: "hackernews",
@@ -42,6 +36,15 @@ export const hackerNewsProvider: SignalProvider = {
   description:
     "Relevance-ranked Algolia search over recent HN stories, with a local relevance gate. Best for developer-tool and infrastructure ICPs.",
   enabled: true,
+  requires: [],
+  kinds: [
+    "negative_review",
+    "pain_point_post",
+    "funding_round",
+    "product_launch",
+    "tech_adoption",
+    "media_mention",
+  ],
 
   async fetch(ctx: ProviderContext): Promise<ProviderOutput> {
     const signals: Signal[] = [];
@@ -82,12 +85,7 @@ export const hackerNewsProvider: SignalProvider = {
       for (const hit of hits) {
         if (!hit.title || seen.has(hit.objectID)) continue;
 
-        // Every content word must appear somewhere, and at least one must
-        // appear in the title. Body-only matches are how a long post about
-        // something unrelated accumulates four common words by chance.
-        const fullMatch =
-          relevance(keyword, `${hit.title} ${hit.story_text ?? ""}`) >= RELEVANCE_FLOOR;
-        if (!fullMatch || relevance(keyword, hit.title) === 0) {
+        if (!passesGate(keyword, hit.title, hit.story_text ?? "")) {
           rejected++;
           continue;
         }
@@ -96,7 +94,7 @@ export const hackerNewsProvider: SignalProvider = {
         const domain = hostOf(hit.url);
         signals.push({
           provider: "hackernews",
-          kind: classify(hit.title),
+          kind: classify(hit.title, Boolean(domain)),
           company: domain ? prettyCompany(domain) : hit.author,
           domain,
           personName: null,
@@ -108,6 +106,10 @@ export const hackerNewsProvider: SignalProvider = {
             (hit.story_text ? stripTags(hit.story_text).slice(0, 240) : hit.title),
           url: hit.url ?? `https://news.ycombinator.com/item?id=${hit.objectID}`,
           detectedAt: new Date().toISOString(),
+          // The story's own timestamp, not ours — the search window reaches
+          // back six months, and intent decay is the only thing separating a
+          // complaint posted this morning from one posted in the spring.
+          occurredAt: hit.created_at,
           dedupeKey: `hn:${hit.objectID}`,
         });
       }
@@ -127,37 +129,31 @@ export const hackerNewsProvider: SignalProvider = {
 };
 
 /**
- * Share of the term's content words that literally appear in the story.
- * Deliberately crude — its only job is to reject OR-matches, not to rank.
- *
- * Short words are kept: "CRM", "API", and "MX" are exactly the words that make
- * a term specific, and dropping them is what let a story about an IAM breach
- * pass as a match for "CRM data hygiene".
+ * Maps a story to the taxonomy. `linksOut` distinguishes a submitted article
+ * from a text post: an Ask HN with no URL is someone describing their own
+ * problem, whereas a linked article about a company is press coverage. Both
+ * used to land in `pain_point_post`, which over-scored every piece of trade
+ * news by 50 points.
  */
-function relevance(term: string, haystack: string): number {
-  const words = term
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
-  if (words.length === 0) return 1;
-
-  const text = haystack.toLowerCase();
-  const present = words.filter((w) => text.includes(w)).length;
-  return present / words.length;
-}
-
-const STOPWORDS = new Set([
-  "the", "and", "for", "with", "from", "that", "this", "your", "their",
-  "about", "into", "using", "when", "how", "why", "are", "was",
-]);
-
-function classify(title: string): SignalKind {
+function classify(title: string, linksOut: boolean): SignalKind {
   const t = title.toLowerCase();
   if (/\braise[sd]?\b|\bseries [a-e]\b|\bseed round\b|\bfunding\b/.test(t)) return "funding_round";
   if (/^show hn|^launch hn|\blaunch(ing|ed)?\b|\bintroducing\b/.test(t)) return "product_launch";
+  // Dissatisfaction with an incumbent, which is the hottest thing HN produces:
+  // the author has the problem, has tried the alternative, and is saying so in
+  // public. Checked before the neutral migration pattern, since "why we left X"
+  // matches both and the complaint is the more specific reading.
+  if (
+    /\bwhy we (left|dropped|ditched|moved off)\b|\bmoving (off|away from)\b|\bditch(ing|ed)\b|\balternatives? to\b|\bfed up with\b|\bsick of\b|\bfrustrat(ed|ing) with\b|\b(is|are) broken\b/.test(
+      t,
+    )
+  )
+    return "negative_review";
   if (/\bmigrat(e|ing|ed)\b|\bswitch(ing|ed)? (to|from)\b|\bwe moved to\b/.test(t))
     return "tech_adoption";
-  return "pain_point_post";
+  if (/^ask hn|\bhow do you\b|\banyone else\b|\brecommendations?\b|\bhelp\b/.test(t) || !linksOut)
+    return "pain_point_post";
+  return "media_mention";
 }
 
 function hostOf(url: string | null): string | null {

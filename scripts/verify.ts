@@ -6,8 +6,15 @@
  */
 import { getProfile, listWatchlist } from "../src/lib/db";
 import { enrichEmail, enrichmentProviderStatus } from "../src/lib/enrichment";
-import { collectSignals, PROVIDERS } from "../src/lib/signals/registry";
-import { SIGNAL_STRENGTH } from "../src/lib/signals/types";
+import { collectSignals, providerStatus } from "../src/lib/signals/registry";
+import { outboundTargetStatus } from "../src/lib/outbound";
+import {
+  freshness,
+  intentFor,
+  SIGNAL_HALF_LIFE_DAYS,
+  SIGNAL_STRENGTH,
+  type SignalKind,
+} from "../src/lib/signals/types";
 import { scheduleFor } from "../src/lib/messaging";
 
 const line = (s: string) => console.log(s);
@@ -20,7 +27,18 @@ if (!profile) {
 }
 
 head("Providers registered");
-for (const p of PROVIDERS) line(`  ${p.enabled ? "on " : "off"}  ${p.id.padEnd(12)} ${p.label}`);
+for (const p of providerStatus()) {
+  const state = !p.enabled ? "off " : p.configured ? "on  " : "keys";
+  line(
+    `  ${state} ${p.id.padEnd(12)} ${p.label}` +
+      (p.enabled && !p.configured ? `  — needs ${p.missing.join(", ")}` : ""),
+  );
+}
+
+head("Outbound destinations");
+for (const t of outboundTargetStatus()) {
+  line(`  ${t.available ? "ready  " : "not set"} ${t.id.padEnd(10)} ${t.missing.join(", ")}`);
+}
 
 head("Signal ingestion (live)");
 const watchlist = (await listWatchlist()).map((w) => ({
@@ -48,9 +66,32 @@ line(`  ${"TOTAL".padEnd(12)} ${String(total).padStart(3)}`);
 
 head("Sample signals");
 for (const s of results.flatMap((r) => r.signals).slice(0, 5)) {
-  line(`  [${s.provider}/${s.kind}] intent=${SIGNAL_STRENGTH[s.kind]}`);
+  const at = s.occurredAt ?? s.detectedAt;
+  line(
+    `  [${s.provider}/${s.kind}] peak=${SIGNAL_STRENGTH[s.kind]} ` +
+      `now=${intentFor(s.kind, at)} (${Math.round(freshness(s.kind, at) * 100)}% fresh, ` +
+      `event ${at.slice(0, 10)})`,
+  );
   line(`    ${s.headline}`);
   line(`    ${s.evidence.slice(0, 110)}${s.evidence.length > 110 ? "..." : ""}`);
+}
+
+head("Event dating");
+// A provider that leaves occurredAt null makes its signals look permanently
+// fresh, which quietly disables decay for that whole source.
+for (const r of results) {
+  const dated = r.signals.filter((s) => s.occurredAt !== null).length;
+  if (r.signals.length === 0) continue;
+  line(`  ${r.provider.padEnd(12)} ${dated}/${r.signals.length} signals carry an event date`);
+}
+
+head("Intent decay curve");
+for (const kind of ["event_rsvp", "pain_point_post", "funding_round"] as SignalKind[]) {
+  const at = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const points = [0, 1, 7, 30, 180]
+    .map((d) => `${d}d=${intentFor(kind, at(d))}`)
+    .join("  ");
+  line(`  ${kind.padEnd(18)} half-life ${String(SIGNAL_HALF_LIFE_DAYS[kind]).padStart(2)}d   ${points}`);
 }
 
 head("Dedupe determinism");

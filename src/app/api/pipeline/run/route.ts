@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { describeAiError } from "@/lib/claude";
 import { MissingProfileError, runPipeline, type RunOptions } from "@/lib/pipeline";
+import { parseKinds } from "@/lib/signals/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
   try {
     const stats = await runPipeline({
       providers: Array.isArray(body.providers) ? body.providers : undefined,
+      // Unrecognised kinds are dropped, and an all-unknown list falls back to
+      // "every kind" rather than silently collecting nothing.
+      kinds: parseKinds(body.kinds),
       threshold: clampNum(body.threshold, 0, 100, 60),
       maxOutreach: clampNum(body.maxOutreach, 1, 25, 4),
       perProviderLimit: clampNum(body.perProviderLimit, 1, 40, 12),

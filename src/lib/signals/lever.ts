@@ -24,6 +24,8 @@ export const leverProvider: SignalProvider = {
   description:
     "Public postings API. Detects hiring spikes and newly opened roles for watchlisted companies.",
   enabled: true,
+  requires: [],
+  kinds: ["hiring_spike", "new_role_opened"],
 
   async fetch(ctx: ProviderContext): Promise<ProviderOutput> {
     const signals: Signal[] = [];
@@ -72,6 +74,8 @@ export const leverProvider: SignalProvider = {
           }, including "${recent[0].text}".`,
           url: recent[0].hostedUrl,
           detectedAt: new Date().toISOString(),
+          // As fresh as the most recent opening in the cluster.
+          occurredAt: new Date(Math.max(...recent.map((p) => p.createdAt))).toISOString(),
           dedupeKey: `lever:spike:${target.handle}:${new Date().toISOString().slice(0, 7)}`,
         });
       } else {
@@ -89,6 +93,7 @@ export const leverProvider: SignalProvider = {
             } opened on ${new Date(p.createdAt).toISOString().slice(0, 10)}.`,
             url: p.hostedUrl,
             detectedAt: new Date().toISOString(),
+            occurredAt: new Date(p.createdAt).toISOString(),
             dedupeKey: `lever:job:${target.handle}:${p.id}`,
           });
         }

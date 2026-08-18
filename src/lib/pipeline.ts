@@ -11,9 +11,20 @@ import {
 } from "./db";
 import { enrichEmail } from "./enrichment";
 import { generateSequence, scheduleFor } from "./messaging";
+import { outboundConfigured, pushLead, type PushOutcome } from "./outbound";
+import { isLeadOutcome, type LeadOutcome } from "./outcomes";
 import { scoreSignals } from "./scoring";
 import { collectSignals } from "./signals/registry";
-import type { Signal } from "./signals/types";
+import {
+  freshness,
+  SIGNAL_STRENGTH,
+  type Signal,
+  type SignalKind,
+} from "./signals/types";
+
+// Re-exported so callers that already depend on the pipeline read model do not
+// need a second import for the outcome vocabulary.
+export { isLeadOutcome, LEAD_OUTCOMES, OUTCOME_LABEL, type LeadOutcome } from "./outcomes";
 
 /** Thrown when the pipeline runs before an ICP exists — a precondition, not a fault. */
 export class MissingProfileError extends Error {
@@ -25,23 +36,40 @@ export class MissingProfileError extends Error {
 export interface RunOptions {
   /** Restrict to specific provider ids. Omit to run every enabled provider. */
   providers?: string[];
+  /**
+   * Restrict to specific signal kinds. Omit to accept every kind a provider
+   * emits. This is a *watch* setting rather than a view filter: unselected
+   * kinds are dropped before they are persisted, so they never reach scoring
+   * and never cost a model call.
+   */
+  kinds?: SignalKind[];
   /** Leads at or above this total score get enriched and written a sequence. */
   threshold?: number;
   /** Max leads to enrich + write copy for in one run (each costs a model call). */
   maxOutreach?: number;
   channel?: "email" | "linkedin";
   perProviderLimit?: number;
+  /**
+   * Push qualified leads to the configured outbound destinations as they are
+   * written. Defaults to JUNIPER_AUTO_PUSH=1 — off unless asked for, because a
+   * push writes to systems other people are looking at.
+   */
+  autoPush?: boolean;
 }
 
 export interface RunStats {
   runId: number;
   signalsFound: number;
+  /** Dropped because their kind was not selected for this run. */
+  signalsFiltered: number;
   signalsNew: number;
   scored: number;
   qualified: number;
   disqualified: number;
   enriched: number;
   sequencesWritten: number;
+  /** Leads sent to at least one outbound destination successfully. */
+  pushed: number;
   providerErrors: { provider: string; error: string }[];
   /** Non-fatal source problems — a 404 board, a blocked host, an empty watchlist. */
   providerWarnings: { provider: string; warning: string }[];
@@ -68,10 +96,12 @@ const DEFAULT_BUDGET_MS = Number(process.env.JUNIPER_RUN_BUDGET_MS ?? 50_000);
 export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
   const {
     providers,
+    kinds,
     threshold = 60,
     maxOutreach = 4,
     channel = "email",
     perProviderLimit = 12,
+    autoPush = process.env.JUNIPER_AUTO_PUSH === "1",
   } = opts;
 
   const profile = await getProfile();
@@ -85,12 +115,14 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
   const stats: RunStats = {
     runId,
     signalsFound: 0,
+    signalsFiltered: 0,
     signalsNew: 0,
     scored: 0,
     qualified: 0,
     disqualified: 0,
     enriched: 0,
     sequencesWritten: 0,
+    pushed: 0,
     providerErrors: [],
     providerWarnings: [],
     outreachErrors: [],
@@ -125,8 +157,11 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     }
     stats.signalsFound = found.length;
 
+    const selected = kinds ? found.filter((s) => kinds.includes(s.kind)) : found;
+    stats.signalsFiltered = found.length - selected.length;
+
     const fresh: Signal[] = [];
-    for (const s of found) if (await persistSignal(s)) fresh.push(s);
+    for (const s of selected) if (await persistSignal(s)) fresh.push(s);
     stats.signalsNew = fresh.length;
     if (fresh.length === 0) return await finish(runId, stats, started);
 
@@ -212,6 +247,22 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
         await writeSequence(leadId, channel, seq);
         stats.sequencesWritten++;
         await run("UPDATE leads SET status = 'sequenced' WHERE id = ?", [leadId]);
+
+        // Opt-in, because a push is visible to other people: it drops a record
+        // into a shared CRM or a team channel. Nobody should discover that by
+        // running the pipeline for the first time.
+        if (autoPush && outboundConfigured()) {
+          const outcomes = await pushLeadById(leadId);
+          if (outcomes?.some((o) => o.ok)) stats.pushed++;
+          for (const o of outcomes ?? []) {
+            if (!o.ok && !o.detail.startsWith("skipped")) {
+              stats.outreachErrors.push({
+                company: s.signal.company,
+                error: `${o.target}: ${o.detail}`,
+              });
+            }
+          }
+        }
       } catch (err) {
         stats.outreachErrors.push({
           company: s.signal.company,
@@ -239,8 +290,8 @@ async function persistSignal(s: Signal): Promise<boolean> {
   const res = await run(
     `INSERT OR IGNORE INTO signals
        (provider, kind, company, domain, person_name, person_title,
-        headline, evidence, url, strength, detected_at, dedupe_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        headline, evidence, url, strength, detected_at, occurred_at, dedupe_key)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       s.provider,
       s.kind,
@@ -251,8 +302,11 @@ async function persistSignal(s: Signal): Promise<boolean> {
       s.headline,
       s.evidence,
       s.url,
-      0,
+      // Peak strength for the kind. Stored undecayed on purpose: the row is a
+      // record of the event, and how stale it is depends on when you ask.
+      SIGNAL_STRENGTH[s.kind],
       s.detectedAt,
+      s.occurredAt,
       s.dedupeKey,
     ],
   );
@@ -305,6 +359,12 @@ export interface LeadView {
   emailSource: string | null;
   emailConfidence: number | null;
   status: string;
+  /** What actually happened after you reached out. Set by hand from the UI. */
+  outcome: LeadOutcome;
+  outcomeAt: string | null;
+  pushedAt: string | null;
+  /** Per-destination result of the last push. */
+  pushResult: PushOutcome[];
   createdAt: string;
   signal: {
     provider: string;
@@ -313,6 +373,9 @@ export interface LeadView {
     evidence: string;
     url: string | null;
     detectedAt: string;
+    occurredAt: string | null;
+    /** Recomputed on read, so a lead visibly cools while it sits in the list. */
+    freshness: number;
   };
   messages: {
     id: number;
@@ -325,11 +388,55 @@ export interface LeadView {
   }[];
 }
 
+/** A half-written blob from an interrupted push must not take the page down. */
+function parsePushResult(json: string | null): PushOutcome[] {
+  if (!json) return [];
+  try {
+    const parsed: unknown = JSON.parse(json);
+    return Array.isArray(parsed) ? (parsed as PushOutcome[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Sends a lead to every configured outbound destination and records what each
+ * one said. Returns null when the id matches no lead, so the route can 404.
+ */
+export async function pushLeadById(id: number): Promise<PushOutcome[] | null> {
+  const lead = await getLead(id);
+  if (!lead) return null;
+
+  const profile = await getProfile();
+  const outcomes = await pushLead(lead, profile);
+
+  await run("UPDATE leads SET pushed_at = ?, push_result = ? WHERE id = ?", [
+    now(),
+    JSON.stringify(outcomes),
+    id,
+  ]);
+  return outcomes;
+}
+
+export async function getLead(id: number): Promise<LeadView | null> {
+  const all = await listLeads({ includeDisqualified: true });
+  return all.find((l) => l.id === id) ?? null;
+}
+
+/** Returns false when the id matches no lead, so the route can answer 404. */
+export async function setLeadOutcome(id: number, outcome: LeadOutcome): Promise<boolean> {
+  const res = await run(
+    "UPDATE leads SET outcome = ?, outcome_at = ? WHERE id = ?",
+    [outcome, outcome === "none" ? null : now(), id],
+  );
+  return Number(res.rowsAffected) > 0;
+}
+
 export async function listLeads(
   opts: { includeDisqualified?: boolean } = {},
 ): Promise<LeadView[]> {
   const rows = await query(
-    `SELECT l.*, s.provider, s.kind, s.headline, s.evidence, s.url, s.detected_at
+    `SELECT l.*, s.provider, s.kind, s.headline, s.evidence, s.url, s.detected_at, s.occurred_at
      FROM leads l JOIN signals s ON s.id = l.signal_id
      ${opts.includeDisqualified ? "" : "WHERE l.disqualified = 0"}
      ORDER BY l.total_score DESC, l.created_at DESC`,
@@ -351,6 +458,10 @@ export async function listLeads(
     emailSource: nstr(r.email_source),
     emailConfidence: nnum(r.email_confidence),
     status: str(r.status),
+    outcome: (isLeadOutcome(r.outcome) ? r.outcome : "none") as LeadOutcome,
+    outcomeAt: nstr(r.outcome_at),
+    pushedAt: nstr(r.pushed_at),
+    pushResult: parsePushResult(nstr(r.push_result)),
     createdAt: str(r.created_at),
     signal: {
       provider: str(r.provider),
@@ -359,6 +470,11 @@ export async function listLeads(
       evidence: str(r.evidence),
       url: nstr(r.url),
       detectedAt: str(r.detected_at),
+      occurredAt: nstr(r.occurred_at),
+      freshness: freshness(
+        str(r.kind) as SignalKind,
+        nstr(r.occurred_at) ?? str(r.detected_at),
+      ),
     },
     messages: messages
       .filter((m) => num(m.lead_id) === num(r.id))
@@ -383,6 +499,9 @@ export interface SignalFeedRow {
   evidence: string;
   url: string | null;
   detectedAt: string;
+  occurredAt: string | null;
+  /** Share of peak intent left as of now, 0.1-1. */
+  freshness: number;
   totalScore: number | null;
   disqualified: boolean;
 }
@@ -391,7 +510,7 @@ export async function listSignalFeed(limit = 60): Promise<SignalFeedRow[]> {
   const rows = await query(
     `SELECT s.*, l.total_score, l.disqualified
      FROM signals s LEFT JOIN leads l ON l.signal_id = s.id
-     ORDER BY s.detected_at DESC LIMIT ?`,
+     ORDER BY COALESCE(s.occurred_at, s.detected_at) DESC LIMIT ?`,
     [limit],
   );
 
@@ -404,6 +523,11 @@ export async function listSignalFeed(limit = 60): Promise<SignalFeedRow[]> {
     evidence: str(r.evidence),
     url: nstr(r.url),
     detectedAt: str(r.detected_at),
+    occurredAt: nstr(r.occurred_at),
+    freshness: freshness(
+      str(r.kind) as SignalKind,
+      nstr(r.occurred_at) ?? str(r.detected_at),
+    ),
     totalScore: nnum(r.total_score),
     disqualified: num(r.disqualified ?? 0) === 1,
   }));

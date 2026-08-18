@@ -49,6 +49,7 @@ const boards: Parameters<typeof addWatchlistEntry>[0][] = [
   { provider: "greenhouse", handle: "gitlab", label: "GitLab", domain: "gitlab.com" },
   { provider: "greenhouse", handle: "figma", label: "Figma", domain: "figma.com" },
   { provider: "lever", handle: "leverdemo", label: "Lever Demo Co", domain: "lever.co" },
+  { provider: "ashby", handle: "ramp", label: "Ramp", domain: "ramp.com" },
 ];
 for (const b of boards) await addWatchlistEntry(b);
 

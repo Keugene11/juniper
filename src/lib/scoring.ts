@@ -1,13 +1,18 @@
 import { jsonCall } from "./claude";
 import type { Profile } from "./db";
-import { SIGNAL_STRENGTH, type Signal } from "./signals/types";
+import { freshness, intentFor, type Signal } from "./signals/types";
 
 export interface ScoredSignal {
   signal: Signal;
   /** How well the company/person matches the ICP, 0-100. Judged by Claude. */
   fitScore: number;
-  /** How strongly the event predicts buying, 0-100. Deterministic per signal kind. */
+  /**
+   * How strongly the event predicts buying *today*, 0-100: the kind's peak
+   * strength decayed by how long ago it happened. Deterministic — no model call.
+   */
   intentScore: number;
+  /** Share of peak strength remaining, 0.1-1. Kept for display and analytics. */
+  freshness: number;
   totalScore: number;
   disqualified: boolean;
   rationale: string;
@@ -20,9 +25,13 @@ const BATCH_SIZE = 25;
 /**
  * Filters the signal firehose down to a reviewable set.
  *
- * Intent comes from the signal taxonomy and needs no model call. Fit needs
- * judgement, so it goes to Claude — batched, because scoring 60 signals in one
- * call is far cheaper and more consistent than 60 calls.
+ * Intent comes from the signal taxonomy and the event's age, and needs no model
+ * call. Fit needs judgement, so it goes to Claude — batched, because scoring 60
+ * signals in one call is far cheaper and more consistent than 60 calls.
+ *
+ * Both halves are needed and neither is sufficient: a perfect-fit company with
+ * a six-month-old trigger has nothing to open with, and a red-hot complaint
+ * from a company you cannot serve is still a bad lead.
  */
 export async function scoreSignals(
   profile: Profile,
@@ -42,11 +51,15 @@ export async function scoreSignals(
         disqualified: true,
         rationale: "No verdict returned for this signal.",
       };
-      const intentScore = SIGNAL_STRENGTH[signal.kind];
+      // The event's own timestamp where the source published one; falling back
+      // to when we first saw it, which is the earliest date we can defend.
+      const at = signal.occurredAt ?? signal.detectedAt;
+      const intentScore = intentFor(signal.kind, at);
       out.push({
         signal,
         fitScore: clamp(verdict.fitScore),
         intentScore,
+        freshness: freshness(signal.kind, at),
         totalScore: Math.round(
           clamp(verdict.fitScore) * FIT_WEIGHT + intentScore * INTENT_WEIGHT,
         ),

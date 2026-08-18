@@ -53,7 +53,9 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
       <p className="mt-1 text-xs leading-relaxed text-muted">
         Companies to monitor for hiring signals. The handle is the slug in their board URL —
         e.g. <code className="rounded bg-wash px-1">stripe</code> for{" "}
-        <code className="rounded bg-wash px-1">boards.greenhouse.io/stripe</code>.
+        <code className="rounded bg-wash px-1">boards.greenhouse.io/stripe</code>. For Unipile
+        the handle is a LinkedIn <em>post id</em> instead: everyone who reacted or commented on
+        that post becomes a competitor-engagement signal.
       </p>
 
       <div className="mt-3 grid grid-cols-2 gap-2">
@@ -64,6 +66,8 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
         >
           <option value="greenhouse">Greenhouse</option>
           <option value="lever">Lever</option>
+          <option value="ashby">Ashby</option>
+          <option value="unipile">LinkedIn post (Unipile)</option>
         </select>
         <input
           value={handle}

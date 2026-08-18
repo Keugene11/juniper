@@ -26,6 +26,8 @@ export const linkedInProvider: SignalProvider = {
   description:
     "Not implemented. Requires scraping (ToS violation, account-restriction risk) or partner API access.",
   enabled: false,
+  requires: [],
+  kinds: ["competitor_engagement", "job_change", "event_rsvp", "pain_point_post"],
 
   async fetch(): Promise<never> {
     throw new ProviderDisabledError(

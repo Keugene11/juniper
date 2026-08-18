@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Radio, Send, SlidersHorizontal } from "lucide-react";
+import { BarChart3, Radio, Send, SlidersHorizontal } from "lucide-react";
 
 const TABS = [
   { href: "/", label: "Signals", Icon: Radio },
   { href: "/leads", label: "Leads", Icon: Send },
+  { href: "/activity", label: "Activity", Icon: BarChart3 },
   { href: "/setup", label: "Setup", Icon: SlidersHorizontal },
 ];
 

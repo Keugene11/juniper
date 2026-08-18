@@ -28,6 +28,8 @@ export const greenhouseProvider: SignalProvider = {
   description:
     "Public job-board JSON. Detects hiring spikes and newly opened roles for watchlisted companies.",
   enabled: true,
+  requires: [],
+  kinds: ["hiring_spike", "new_role_opened"],
 
   async fetch(ctx: ProviderContext): Promise<ProviderOutput> {
     const signals: Signal[] = [];
@@ -65,6 +67,11 @@ export const greenhouseProvider: SignalProvider = {
 
       if (recent.length >= SPIKE_THRESHOLD) {
         const titles = recent.slice(0, 6).map((j) => j.title);
+        // The spike is as fresh as its most recent opening.
+        const latest = recent.reduce(
+          (a, b) => (Date.parse(b.updated_at) > Date.parse(a.updated_at) ? b : a),
+          recent[0],
+        );
         signals.push({
           provider: "greenhouse",
           kind: "hiring_spike",
@@ -78,6 +85,7 @@ export const greenhouseProvider: SignalProvider = {
           }.`,
           url: recent[0].absolute_url,
           detectedAt: new Date().toISOString(),
+          occurredAt: latest.updated_at,
           dedupeKey: `greenhouse:spike:${target.handle}:${monthStamp()}`,
         });
       } else {
@@ -95,6 +103,7 @@ export const greenhouseProvider: SignalProvider = {
             } was posted or updated on ${job.updated_at.slice(0, 10)}.`,
             url: job.absolute_url,
             detectedAt: new Date().toISOString(),
+            occurredAt: job.updated_at,
             dedupeKey: `greenhouse:job:${target.handle}:${job.id}`,
           });
         }

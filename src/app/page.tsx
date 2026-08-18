@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 import { RunPanel } from "@/components/run-panel";
-import { Badge, Empty, PageHeader, relativeTime } from "@/components/ui";
+import { Badge, Empty, FreshnessTag, PageHeader, relativeTime } from "@/components/ui";
 import { getProfile } from "@/lib/db";
 import { listSignalFeed, type SignalFeedRow } from "@/lib/pipeline";
+import { collectableKinds } from "@/lib/signals/registry";
 import { SIGNAL_LABEL, type SignalKind } from "@/lib/signals/types";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export default async function SignalsPage() {
         }
       />
 
-      <RunPanel ready={Boolean(profile)} />
+      <RunPanel ready={Boolean(profile)} kinds={collectableKinds()} />
 
       <div className="mt-6 space-y-2">
         {feed.length === 0 ? (
@@ -51,6 +52,7 @@ function SignalRow({ row }: { row: SignalFeedRow }) {
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge tone="solid">{SIGNAL_LABEL[kind] ?? kind}</Badge>
             <Badge tone="quiet">{row.provider}</Badge>
+            <FreshnessTag value={row.freshness} />
             {row.disqualified && <Badge tone="quiet">out of ICP</Badge>}
           </div>
           <h2 className="mt-2 text-sm font-medium leading-snug">{row.headline}</h2>
@@ -67,7 +69,9 @@ function SignalRow({ row }: { row: SignalFeedRow }) {
 
       <div className="mt-3 flex items-center gap-3 text-[11px] text-muted">
         <span>{row.company}</span>
-        <span>{relativeTime(row.detectedAt)}</span>
+        {/* The event's own date where the source gave one — when it happened is
+            what decides whether it is still worth acting on, not when we saw it. */}
+        <span>{relativeTime(row.occurredAt ?? row.detectedAt)}</span>
         {row.url && (
           <a
             href={row.url}

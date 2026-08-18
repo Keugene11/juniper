@@ -4,13 +4,16 @@ import { WatchlistManager } from "@/components/watchlist-manager";
 import { PageHeader } from "@/components/ui";
 import { getProfile, isEphemeral, listWatchlist } from "@/lib/db";
 import { enrichmentProviderStatus } from "@/lib/enrichment";
-import { PROVIDERS } from "@/lib/signals/registry";
+import { outboundTargetStatus } from "@/lib/outbound";
+import { providerStatus } from "@/lib/signals/registry";
 
 export const dynamic = "force-dynamic";
 
 export default async function SetupPage() {
   const [profile, watchlist] = await Promise.all([getProfile(), listWatchlist()]);
   const enrichment = enrichmentProviderStatus();
+  const sources = providerStatus();
+  const outbound = outboundTargetStatus();
 
   return (
     <>
@@ -36,14 +39,53 @@ export default async function SetupPage() {
 
         <section className="card p-4">
           <h2 className="text-sm font-semibold">Signal sources</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            A source that needs credentials stays listed and names the variable it wants — an
+            unconfigured source that quietly vanished would be indistinguishable from one that
+            ran and found nothing.
+          </p>
           <ul className="mt-3 divide-y divide-line">
-            {PROVIDERS.map((p) => (
+            {sources.map((p) => (
               <li key={p.id} className="flex items-start gap-3 py-3">
-                <StatusDot on={p.enabled} />
+                <StatusDot on={p.enabled && p.configured} />
                 <div className="min-w-0">
                   <p className="text-sm font-medium">{p.label}</p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted">{p.description}</p>
+                  {p.enabled && !p.configured && (
+                    <p className="mt-1 text-[11px] text-muted">
+                      Needs{" "}
+                      {p.missing.map((k, i) => (
+                        <span key={k}>
+                          {i > 0 && ", "}
+                          <code className="rounded bg-wash px-1">{k}</code>
+                        </span>
+                      ))}{" "}
+                      in <code className="rounded bg-wash px-1">.env</code>
+                    </p>
+                  )}
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="card p-4">
+          <h2 className="text-sm font-semibold">Outbound destinations</h2>
+          <p className="mt-1 text-xs leading-relaxed text-muted">
+            Where a finished lead gets pushed. Unlike the email waterfall these are not
+            alternatives to each other — every configured destination receives every pushed
+            lead, and each reports its own result. Pushing is manual by default; set{" "}
+            <code className="rounded bg-wash px-1">JUNIPER_AUTO_PUSH=1</code> to push during a
+            run.
+          </p>
+          <ul className="mt-3 divide-y divide-line">
+            {outbound.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 py-2.5">
+                <StatusDot on={t.available} />
+                <span className="text-sm">{t.label}</span>
+                <span className="ml-auto text-[11px] text-muted">
+                  {t.available ? "ready" : t.missing.join(", ")}
+                </span>
               </li>
             ))}
           </ul>

@@ -1,6 +1,17 @@
 import Link from "next/link";
 import { Mail, CircleAlert } from "lucide-react";
-import { Badge, Empty, PageHeader, ScoreBar, Stat, relativeTime } from "@/components/ui";
+import { OutcomeControl } from "@/components/outcome-control";
+import { PushControl } from "@/components/push-control";
+import {
+  Badge,
+  Empty,
+  FreshnessTag,
+  PageHeader,
+  ScoreBar,
+  Stat,
+  relativeTime,
+} from "@/components/ui";
+import { outboundConfigured } from "@/lib/outbound";
 import { listLeads, type LeadView } from "@/lib/pipeline";
 import { SIGNAL_LABEL, type SignalKind } from "@/lib/signals/types";
 
@@ -10,6 +21,8 @@ export default async function LeadsPage() {
   const leads = await listLeads();
   const sequenced = leads.filter((l) => l.messages.length > 0);
   const withEmail = leads.filter((l) => l.email);
+  const replied = leads.filter((l) => l.outcome === "replied" || l.outcome === "meeting");
+  const canPush = outboundConfigured();
 
   return (
     <>
@@ -19,10 +32,11 @@ export default async function LeadsPage() {
       />
 
       {leads.length > 0 && (
-        <div className="mb-6 grid grid-cols-3 gap-2">
+        <div className="mb-6 grid grid-cols-4 gap-2">
           <Stat label="Qualified" value={leads.length} />
           <Stat label="With email" value={withEmail.length} />
           <Stat label="Sequenced" value={sequenced.length} />
+          <Stat label="Replied" value={replied.length} />
         </div>
       )}
 
@@ -36,14 +50,14 @@ export default async function LeadsPage() {
             tab. Leads appear here once a signal clears ICP scoring.
           </Empty>
         ) : (
-          leads.map((lead) => <LeadCard key={lead.id} lead={lead} />)
+          leads.map((lead) => <LeadCard key={lead.id} lead={lead} canPush={canPush} />)
         )}
       </div>
     </>
   );
 }
 
-function LeadCard({ lead }: { lead: LeadView }) {
+function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
   const kind = lead.signal.kind as SignalKind;
 
   return (
@@ -70,6 +84,8 @@ function LeadCard({ lead }: { lead: LeadView }) {
 
         <div className="mt-3 grid grid-cols-2 gap-3">
           <ScoreBar label="ICP fit" value={lead.fitScore} />
+          {/* Intent is the decayed value as of scoring time; the freshness tag
+              below shows how much of it is left now. */}
           <ScoreBar label="Intent" value={lead.intentScore} />
         </div>
 
@@ -80,8 +96,9 @@ function LeadCard({ lead }: { lead: LeadView }) {
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone="solid">{SIGNAL_LABEL[kind] ?? kind}</Badge>
           <Badge tone="quiet">{lead.signal.provider}</Badge>
+          <FreshnessTag value={lead.signal.freshness} />
           <span className="text-[11px] text-muted">
-            {relativeTime(lead.signal.detectedAt)}
+            {relativeTime(lead.signal.occurredAt ?? lead.signal.detectedAt)}
           </span>
         </div>
         <p className="mt-2 text-xs font-medium leading-snug">{lead.signal.headline}</p>
@@ -123,6 +140,16 @@ function LeadCard({ lead }: { lead: LeadView }) {
             </p>
           </div>
         )}
+
+        <div className="mt-4 space-y-4 border-t border-line pt-4">
+          <OutcomeControl leadId={lead.id} initial={lead.outcome} />
+          <PushControl
+            leadId={lead.id}
+            configured={canPush}
+            pushedAt={lead.pushedAt}
+            initial={lead.pushResult}
+          />
+        </div>
       </div>
     </article>
   );

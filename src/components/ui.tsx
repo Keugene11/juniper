@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { freshnessLabel } from "@/lib/signals/types";
 
 export function PageHeader({ title, sub }: { title: string; sub?: string }) {
   return (
@@ -40,6 +41,22 @@ export function Badge({
     >
       {children}
     </span>
+  );
+}
+
+/**
+ * How much of the event's intent is left. Shown next to the score because the
+ * score was computed when the signal was ingested: a lead that was an 82 last
+ * week is not an 82 today, and the tag is what makes that visible without
+ * re-running scoring.
+ */
+export function FreshnessTag({ value }: { value: number }) {
+  const band = freshnessLabel(value);
+  const tone = band === "hot" ? "solid" : band === "warm" ? "neutral" : "quiet";
+  return (
+    <Badge tone={tone}>
+      {band} · {Math.round(value * 100)}%
+    </Badge>
   );
 }
 

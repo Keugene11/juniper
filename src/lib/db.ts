@@ -45,6 +45,7 @@ const SCHEMA = [
     url          TEXT,
     strength     INTEGER NOT NULL,
     detected_at  TEXT NOT NULL,
+    occurred_at  TEXT,
     dedupe_key   TEXT NOT NULL UNIQUE
   )`,
   `CREATE TABLE IF NOT EXISTS leads (
@@ -63,6 +64,10 @@ const SCHEMA = [
     email_source     TEXT,
     email_confidence INTEGER,
     status           TEXT NOT NULL DEFAULT 'scored',
+    outcome          TEXT NOT NULL DEFAULT 'none',
+    outcome_at       TEXT,
+    pushed_at        TEXT,
+    push_result      TEXT,
     created_at       TEXT NOT NULL,
     UNIQUE (signal_id)
   )`,
@@ -88,6 +93,22 @@ const SCHEMA = [
   `CREATE INDEX IF NOT EXISTS idx_leads_score ON leads(total_score DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_messages_lead ON messages(lead_id, step)`,
   `CREATE INDEX IF NOT EXISTS idx_signals_detected ON signals(detected_at DESC)`,
+];
+
+/**
+ * Columns added after the first release. `CREATE TABLE IF NOT EXISTS` is a
+ * no-op on an existing database, so new columns have to arrive this way or a
+ * deployment against a live Turso instance would silently keep the old shape
+ * and fail on first query. SQLite has no `ADD COLUMN IF NOT EXISTS`, so a
+ * duplicate-column error is the expected outcome on every run after the first
+ * and is swallowed; anything else is re-thrown.
+ */
+const MIGRATIONS = [
+  `ALTER TABLE signals ADD COLUMN occurred_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN outcome TEXT NOT NULL DEFAULT 'none'`,
+  `ALTER TABLE leads ADD COLUMN outcome_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN pushed_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN push_result TEXT`,
 ];
 
 export function isRemote(): boolean {
@@ -124,6 +145,13 @@ export async function db(): Promise<Client> {
 
     try {
       for (const stmt of SCHEMA) await pending.execute(stmt);
+      for (const stmt of MIGRATIONS) {
+        try {
+          await pending.execute(stmt);
+        } catch (err) {
+          if (!/duplicate column name/i.test(String(err))) throw err;
+        }
+      }
     } catch (err) {
       // Let the next caller retry instead of caching a broken connection.
       ready = null;
