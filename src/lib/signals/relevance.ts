@@ -8,23 +8,38 @@
  */
 
 /**
- * Share of the term's content words that literally appear in the haystack.
+ * Share of the term's content words that appear in the haystack as whole words.
  * Deliberately crude — its only job is to reject OR-matches, not to rank.
  *
  * Short words are kept: "CRM", "API", and "MX" are exactly the words that make
  * a term specific, and dropping them is what let a story about an IAM breach
- * pass as a match for "CRM data hygiene".
+ * pass as a match for "CRM data hygiene". The floor is two characters rather
+ * than three, because at three a term consisting only of a short acronym — "AI",
+ * "MX", "HR" — reduced to *no* content words, and a term with no content words
+ * matches everything. A single two-letter watch term used to switch the whole
+ * gate off for every keyword source at once.
+ *
+ * Matching is on word boundaries, not substrings. `includes` made "API" match
+ * "rapid", "capital" and "therapist", which is the same false-positive the gate
+ * exists to stop — just harder to notice.
  */
 export function relevance(term: string, haystack: string): number {
   const words = term
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+    .filter((w) => w.length >= 2 && !STOPWORDS.has(w));
+  // Only reachable for a degenerate term — all stopwords, or all single
+  // characters. There is nothing to test against, so nothing is rejected.
   if (words.length === 0) return 1;
 
   const text = haystack.toLowerCase();
-  const present = words.filter((w) => text.includes(w)).length;
+  const present = words.filter((w) => hasWord(text, w)).length;
   return present / words.length;
+}
+
+/** Whole-word containment. Words are already `[a-z0-9]+`, so `\b` is safe. */
+function hasWord(text: string, word: string): boolean {
+  return new RegExp(`\\b${word}\\b`).test(text);
 }
 
 /**

@@ -240,27 +240,45 @@ const nnum = (v: unknown) => (v === null || v === undefined ? null : Number(v));
  * strings by hand would have been ~50 chances to misnumber one, so the
  * translation lives here instead, where it is one function to get right.
  *
- * Quoted literals and `--` comments are skipped so a `?` inside either is left
- * alone. Postgres doubles single quotes to escape them, and toggling twice on
- * `''` lands in the same state, so that case needs no special handling.
+ * Quoted literals, line comments and block comments are all skipped so a `?`
+ * inside any of them is left alone — the schema in this very file carries block
+ * comments, so that is a real shape rather than a hypothetical. Postgres
+ * doubles single quotes to escape them, and toggling twice on `''` lands in the
+ * same state, so that case needs no special handling.
  */
 function toPositional(sql: string): string {
   let out = "";
   let n = 0;
   let inString = false;
-  let inComment = false;
+  let inLine = false;
+  let inBlock = false;
 
   for (let i = 0; i < sql.length; i++) {
     const c = sql[i];
 
-    if (inComment) {
+    if (inLine) {
       out += c;
-      if (c === "\n") inComment = false;
+      if (c === "\n") inLine = false;
+      continue;
+    }
+    if (inBlock) {
+      out += c;
+      if (c === "*" && sql[i + 1] === "/") {
+        out += "/";
+        i++;
+        inBlock = false;
+      }
       continue;
     }
     if (!inString && c === "-" && sql[i + 1] === "-") {
-      inComment = true;
+      inLine = true;
       out += c;
+      continue;
+    }
+    if (!inString && c === "/" && sql[i + 1] === "*") {
+      inBlock = true;
+      out += "/*";
+      i++;
       continue;
     }
     if (c === "'") {
@@ -415,4 +433,4 @@ export async function removeSuppression(id: number): Promise<void> {
   await run("DELETE FROM suppressions WHERE id = ?", [id]);
 }
 
-export { query, run, str, nstr, num, nnum };
+export { query, run, str, nstr, num, nnum, toPositional };
