@@ -51,7 +51,7 @@ export function OutcomeControl({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-[11px] text-muted">Outcome</span>
+        <span className="text-xs text-muted">Outcome</span>
         {busy && <Loader2 size={11} className="spinning text-muted" />}
       </div>
       <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -61,7 +61,7 @@ export function OutcomeControl({
             onClick={() => set(o)}
             disabled={busy}
             aria-pressed={outcome === o}
-            className={`press rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+            className={`press rounded-full border px-2.5 py-1 text-xs font-medium ${
               outcome === o ? "border-ink bg-ink text-paper" : "border-line text-muted"
             }`}
           >
@@ -69,7 +69,7 @@ export function OutcomeControl({
           </button>
         ))}
       </div>
-      {error && <p className="mt-2 text-[11px] text-muted">{error}</p>}
+      {error && <p className="mt-2 text-xs text-muted">{error}</p>}
     </div>
   );
 }

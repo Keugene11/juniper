@@ -48,7 +48,7 @@ export default async function ActivityPage() {
         <Stat label="Sequenced" value={totals.sequenced} />
       </div>
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 p-5">
         <h2 className="text-sm font-semibold">Funnel</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Each stage is a filter, so the drop between rows is the point rather than a loss.
@@ -67,7 +67,7 @@ export default async function ActivityPage() {
         </div>
       </section>
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 p-5">
         <h2 className="text-sm font-semibold">Trigger performance</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Reply rate per trigger type, against the intent weight the taxonomy assumes. Where a
@@ -76,7 +76,7 @@ export default async function ActivityPage() {
         </p>
 
         {totals.contacted === 0 && (
-          <p className="mt-3 flex items-start gap-2 rounded-lg bg-wash p-3 text-[11px] leading-relaxed">
+          <p className="mt-3 flex items-start gap-2 rounded-lg bg-wash p-3 text-xs leading-relaxed">
             <CircleAlert size={13} className="mt-px shrink-0" />
             No outcomes recorded yet, so reply rates are blank. Mark leads as contacted or
             replied on the Leads tab to start measuring.
@@ -85,7 +85,7 @@ export default async function ActivityPage() {
 
         <div className="-mx-4 mt-3 overflow-x-auto px-4">
           <table className="w-full min-w-[430px] text-left text-xs">
-            <thead className="text-[11px] text-muted">
+            <thead className="text-xs text-muted">
               <tr className="border-b border-line">
                 <th className="py-2 font-medium">Trigger</th>
                 <th className="py-2 text-right font-medium">Weight</th>
@@ -104,7 +104,7 @@ export default async function ActivityPage() {
         </div>
       </section>
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 p-5">
         <h2 className="text-sm font-semibold">Source quality</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Share of each source&apos;s scored signals that survived ICP filtering. A source
@@ -118,7 +118,7 @@ export default async function ActivityPage() {
         </ul>
       </section>
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 p-5">
         <h2 className="text-sm font-semibold">Recent runs</h2>
         <ul className="mt-2 divide-y divide-line">
           {runs.map((r) => (
@@ -193,12 +193,12 @@ function RunRow({ run }: { run: RunRecord }) {
         )}
         {s.truncated && <Badge tone="quiet">stopped early</Badge>}
       </div>
-      <p className="mt-1 text-[11px] text-muted">
+      <p className="mt-1 text-xs text-muted">
         {s.signalsFound ?? 0} seen · {s.signalsNew ?? 0} new · {s.qualified ?? 0} qualified ·{" "}
         {s.sequencesWritten ?? 0} sequenced
         {s.durationMs ? ` · ${(s.durationMs / 1000).toFixed(1)}s` : ""}
       </p>
-      {run.error && <p className="mt-1 text-[11px] text-muted">{run.error}</p>}
+      {run.error && <p className="mt-1 text-xs text-muted">{run.error}</p>}
     </li>
   );
 }

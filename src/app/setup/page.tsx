@@ -43,7 +43,7 @@ export default async function SetupPage() {
         <WatchlistManager initial={watchlist} />
         <SuppressionManager initial={suppressions} />
 
-        <section className="card p-4">
+        <section className="card p-5">
           <h2 className="text-sm font-semibold">Signal sources</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             A source that needs credentials stays listed and names the variable it wants — an
@@ -58,7 +58,7 @@ export default async function SetupPage() {
                   <p className="text-sm font-medium">{p.label}</p>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted">{p.description}</p>
                   {p.enabled && !p.configured && (
-                    <p className="mt-1 text-[11px] text-muted">
+                    <p className="mt-1 text-xs text-muted">
                       Needs{" "}
                       {p.missing.map((k, i) => (
                         <span key={k}>
@@ -75,7 +75,7 @@ export default async function SetupPage() {
           </ul>
         </section>
 
-        <section className="card p-4">
+        <section className="card p-5">
           <h2 className="text-sm font-semibold">Outbound destinations</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Where a finished lead gets pushed. Unlike the email waterfall these are not
@@ -89,7 +89,7 @@ export default async function SetupPage() {
               <li key={t.id} className="flex items-center gap-3 py-2.5">
                 <StatusDot on={t.available} />
                 <span className="text-sm">{t.label}</span>
-                <span className="ml-auto text-[11px] text-muted">
+                <span className="ml-auto text-xs text-muted">
                   {t.available ? "ready" : t.missing.join(", ")}
                 </span>
               </li>
@@ -97,7 +97,7 @@ export default async function SetupPage() {
           </ul>
         </section>
 
-        <section className="card p-4">
+        <section className="card p-5">
           <h2 className="text-sm font-semibold">Email waterfall</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Tried in order until one returns an address. Pattern inference needs no account: it
@@ -109,7 +109,7 @@ export default async function SetupPage() {
               <li key={p.id} className="flex items-center gap-3 py-2.5">
                 <StatusDot on={p.available} />
                 <span className="text-sm">{p.id}</span>
-                <span className="ml-auto text-[11px] text-muted">
+                <span className="ml-auto text-xs text-muted">
                   {p.available ? "ready" : "add API key in .env"}
                 </span>
               </li>

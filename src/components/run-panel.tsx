@@ -60,10 +60,10 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
   return (
     <div className="card p-4">
       <div className="flex items-baseline justify-between">
-        <span className="text-[11px] text-muted">Trigger events to watch</span>
+        <span className="text-xs text-muted">Trigger events to watch</span>
         <button
           onClick={() => setSelected(allSelected ? [] : kinds)}
-          className="press text-[11px] underline"
+          className="press text-xs underline"
         >
           {allSelected ? "Clear all" : "Select all"}
         </button>
@@ -78,7 +78,7 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
               onClick={() => toggle(kind)}
               aria-pressed={on}
               title={`Peak intent weight ${SIGNAL_STRENGTH[kind]}`}
-              className={`press rounded-full border px-2.5 py-1 text-[11px] font-medium ${
+              className={`press rounded-full border px-2.5 py-1 text-xs font-medium ${
                 on ? "border-ink bg-ink text-paper" : "border-line text-muted"
               }`}
             >
@@ -90,7 +90,7 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
 
       <div className="mt-4 flex flex-col gap-3 border-t border-line pt-4 sm:flex-row sm:items-end">
         <label className="flex-1">
-          <span className="text-[11px] text-muted">Score threshold</span>
+          <span className="text-xs text-muted">Score threshold</span>
           <input
             type="range"
             min={0}
@@ -106,11 +106,11 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
         </label>
 
         <label className="sm:w-36">
-          <span className="text-[11px] text-muted">Channel</span>
+          <span className="text-xs text-muted">Channel</span>
           <select
             value={channel}
             onChange={(e) => setChannel(e.target.value as "email" | "linkedin")}
-            className="press mt-1 w-full rounded-lg border border-line px-3 py-2 text-sm"
+            className="press mt-1 w-full rounded-xl border border-line px-3 py-2 text-sm"
           >
             <option value="email">Email</option>
             <option value="linkedin">LinkedIn</option>
@@ -120,7 +120,7 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
         <button
           onClick={run}
           disabled={running || !ready || selected.length === 0}
-          className="press flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-paper"
+          className="press flex items-center justify-center gap-2 btn-primary px-4 py-2.5 text-sm"
         >
           {running ? <Loader2 size={15} className="spinning" /> : <Play size={15} />}
           {running ? "Running" : "Run pipeline"}
@@ -169,11 +169,11 @@ function RunSummary({ stats }: { stats: RunStats }) {
         {rows.map(([label, value]) => (
           <div key={label}>
             <div className="text-base font-semibold tabular-nums leading-none">{value}</div>
-            <div className="mt-1 text-[10px] leading-tight text-muted">{label}</div>
+            <div className="mt-1 text-xs leading-tight text-muted">{label}</div>
           </div>
         ))}
       </div>
-      <p className="mt-3 text-[11px] text-muted">
+      <p className="mt-3 text-xs text-muted">
         Finished in {(stats.durationMs / 1000).toFixed(1)}s.
         {stats.signalsFiltered > 0 &&
           ` ${stats.signalsFiltered} dropped by the trigger filter before scoring.`}
@@ -187,7 +187,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
       {/* The gate is invisible when it works, so it reports itself: a run that
           finds twenty signals and writes three sequences should say why. */}
       {gateTotal(stats) > 0 && (
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           Contact gate held back{" "}
           {[
             stats.deduped > 0 &&
@@ -202,7 +202,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
       )}
 
       {stats.noAddress > 0 && (
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           {stats.noAddress} lead{stats.noAddress === 1 ? "" : "s"} cleared the gate but no
           email address could be found, so no copy was written. Company-level triggers
           (hiring spikes, funding) name no person, and the pattern waterfall needs one.
@@ -212,7 +212,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
       )}
 
       {stats.providerErrors.length > 0 && (
-        <ul className="mt-2 space-y-1 text-[11px] text-muted">
+        <ul className="mt-2 space-y-1 text-xs text-muted">
           {stats.providerErrors.map((e) => (
             <li key={e.provider}>
               <span className="font-medium text-ink">{e.provider}</span> failed: {e.error}
@@ -221,7 +221,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
         </ul>
       )}
       {stats.providerWarnings.length > 0 && (
-        <ul className="mt-2 space-y-1 text-[11px] text-muted">
+        <ul className="mt-2 space-y-1 text-xs text-muted">
           {stats.providerWarnings.map((w, i) => (
             <li key={i}>
               <span className="font-medium text-ink">{w.provider}</span> — {w.warning}
@@ -230,7 +230,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
         </ul>
       )}
       {stats.outreachErrors.length > 0 && (
-        <ul className="mt-2 space-y-1 text-[11px] text-muted">
+        <ul className="mt-2 space-y-1 text-xs text-muted">
           {stats.outreachErrors.map((e, i) => (
             <li key={i}>
               <span className="font-medium text-ink">{e.company}</span>: {e.error}

@@ -20,16 +20,16 @@ export function TargetBar({ profile }: { profile: Profile }) {
     return (
       <div className="mb-5">
         <div className="mb-2 flex items-center justify-between">
-          <p className="text-[11px] uppercase tracking-wide text-muted">Change target</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Change target</p>
           <button
             onClick={() => setEditing(false)}
-            className="press inline-flex items-center gap-1 text-[11px] text-muted underline"
+            className="press inline-flex items-center gap-1 text-xs text-muted underline"
           >
             <X size={11} /> Cancel
           </button>
         </div>
         <ProfileForm initial={profile} />
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           Analysing a new site replaces the ICP everything is scored against. Your watchlist and
           existing leads stay as they are.
         </p>
@@ -39,12 +39,12 @@ export function TargetBar({ profile }: { profile: Profile }) {
 
   return (
     <div className="card mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
-      <span className="text-[11px] uppercase tracking-wide text-muted">Finding leads for</span>
+      <span className="text-xs uppercase tracking-wide text-muted">Finding leads for</span>
       <span className="text-sm font-semibold">{profile.companyName}</span>
       <span className="text-xs text-muted">{hostOf(profile.website)}</span>
       <button
         onClick={() => setEditing(true)}
-        className="press ml-auto inline-flex items-center gap-1.5 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium"
+        className="press ml-auto inline-flex items-center gap-1.5 rounded-xl border border-line px-2.5 py-1.5 text-xs font-medium"
       >
         <Pencil size={12} />
         Change

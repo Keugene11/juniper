@@ -1,12 +1,44 @@
 @import "tailwindcss";
 
+/**
+ * Palette pulled from Gojiberry's own site and adapted.
+ *
+ * Their ink is rgb(10,10,10) — identical to what this already used — over a
+ * near-white ground, with a warm coral/orange accent doing all the emphasis
+ * (#ff653b and its siblings account for most of the colour on the page), grey
+ * #5e5e5e for body copy, and soft rgba(0,0,0,.1) shadows on generously rounded
+ * cards.
+ *
+ * The accent is the part that was missing here. A pure black-and-white
+ * interface has no way to say "this is the thing to press" or "this number
+ * matters", so everything arrived at the same volume and the whole page read as
+ * flat. Colour is spent in one place only: the primary action, the active tab,
+ * and score emphasis. Everything else stays monochrome.
+ */
 @theme {
   --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+
   --color-ink: #0a0a0a;
   --color-paper: #ffffff;
-  --color-line: #e7e7e7;
-  --color-muted: #6b6b6b;
-  --color-wash: #f6f6f6;
+  --color-line: #eaeaea;
+  --color-muted: #5e5e5e;
+  --color-wash: #fafafa;
+  --color-sunken: #f4f4f4;
+
+  /**
+   * Gojiberry's literal accent is #ff653b, and it is the wrong value to put
+   * text on or in: white on it measures 2.9:1 and it measures 2.9:1 on white,
+   * so a button label or a coloured figure using it fails WCAG AA outright.
+   * The hue is kept for fills that carry no text; anything with a glyph on it
+   * uses the darker step, which measures 5.2:1 in both directions.
+   */
+  --color-accent-bright: #ff653b;
+  --color-accent: #c2410c;
+  --color-accent-deep: #b8400e;
+  --color-accent-tint: #fff2ee;
+
+  --color-good: #1f7a4d;
+  --color-warn: #8a6510;
 }
 
 * {
@@ -14,10 +46,11 @@
 }
 
 body {
-  background: var(--color-paper);
+  background: var(--color-wash);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 /* Every interactive element gets this. */
@@ -25,7 +58,9 @@ body {
   transition:
     transform 120ms ease,
     opacity 120ms ease,
-    background-color 120ms ease;
+    background-color 120ms ease,
+    border-color 120ms ease,
+    box-shadow 120ms ease;
 }
 .press:active {
   transform: scale(0.975);
@@ -38,10 +73,60 @@ body {
   transform: none;
 }
 
+/* Keyboard users get the same affordance mouse users get. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+/**
+ * Cards sit on a washed ground rather than on white, so the border can be
+ * lighter and a soft shadow does the lifting instead. Two layers: a hairline to
+ * catch the edge and a wide, very faint one for depth.
+ */
 .card {
   border: 1px solid var(--color-line);
-  border-radius: 14px;
+  border-radius: 16px;
   background: var(--color-paper);
+  box-shadow:
+    0 1px 2px rgba(10, 10, 10, 0.04),
+    0 8px 24px -12px rgba(10, 10, 10, 0.08);
+}
+
+/* The primary action. Exactly one per screen. */
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+  border-radius: 12px;
+  font-weight: 500;
+  box-shadow:
+    0 1px 2px rgba(184, 64, 14, 0.22),
+    0 6px 16px -8px rgba(184, 64, 14, 0.36);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-deep);
+}
+
+/* Everything else. Quiet until hovered. */
+.btn-ghost {
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-weight: 500;
+}
+.btn-ghost:hover:not(:disabled) {
+  border-color: var(--color-ink);
+}
+
+/* Small uppercase label above a group. */
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+  font-weight: 500;
 }
 
 @keyframes spin-slow {
@@ -51,4 +136,13 @@ body {
 }
 .spinning {
   animation: spin-slow 900ms linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinning {
+    animation: none;
+  }
+  .press {
+    transition: none;
+  }
 }

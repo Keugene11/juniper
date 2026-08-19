@@ -46,14 +46,14 @@ export function RunButton({ ready }: { ready: boolean }) {
       <button
         onClick={run}
         disabled={running || !ready}
-        className="press flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-paper disabled:opacity-40"
+        className="press flex items-center justify-center gap-2 btn-primary px-4 py-2.5 text-sm disabled:opacity-40"
       >
         {running ? <Loader2 size={15} className="spinning" /> : <Play size={15} />}
         {running ? "Running" : "Run"}
       </button>
 
       {running && (
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           Pulling sources, scoring against your ICP, then writing copy. Up to a minute.
         </p>
       )}
@@ -66,7 +66,7 @@ export function RunButton({ ready }: { ready: boolean }) {
       )}
 
       {stats && (
-        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+        <p className="mt-2 text-xs leading-relaxed text-muted">
           {stats.signalsNew} new {stats.signalsNew === 1 ? "signal" : "signals"} ·{" "}
           {stats.qualified} fit your ICP · {stats.sequencesWritten} written.{" "}
           {stats.truncated && "Stopped early to stay inside the time budget — run again to continue. "}

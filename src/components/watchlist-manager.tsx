@@ -62,7 +62,7 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
-          className="press col-span-2 rounded-lg border border-line px-3 py-2 text-sm sm:col-span-1"
+          className="press col-span-2 rounded-xl border border-line px-3 py-2 text-sm sm:col-span-1"
         >
           <option value="greenhouse">Greenhouse</option>
           <option value="lever">Lever</option>
@@ -73,19 +73,19 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
           placeholder="board handle"
-          className="col-span-2 rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
+          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
         />
         <input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Company name"
-          className="rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
         <input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           placeholder="domain.com"
-          className="rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
       </div>
 
@@ -106,7 +106,7 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
             <li key={e.id} className="flex items-center gap-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{e.label}</p>
-                <p className="truncate text-[11px] text-muted">
+                <p className="truncate text-xs text-muted">
                   {e.provider} / {e.handle}
                   {e.domain ? ` · ${e.domain}` : " · no domain (blocks enrichment)"}
                 </p>

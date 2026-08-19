@@ -3,22 +3,28 @@ import { freshnessLabel } from "@/lib/signals/types";
 
 export function PageHeader({ title, sub }: { title: string; sub?: string }) {
   return (
-    <div className="mb-5">
-      <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-      {sub && <p className="mt-1 text-sm leading-relaxed text-muted">{sub}</p>}
+    <div className="mb-6">
+      <h1 className="text-3xl font-semibold tracking-[-0.03em]">{title}</h1>
+      {sub && (
+        <p className="mt-2 max-w-[58ch] text-[15px] leading-relaxed text-muted">{sub}</p>
+      )}
     </div>
   );
 }
 
 export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <div className={`card p-4 ${className}`}>{children}</div>;
+  return <div className={`card p-5 ${className}`}>{children}</div>;
 }
 
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
-    <div className="card border-dashed p-8 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      {children && <div className="mt-2 text-sm leading-relaxed text-muted">{children}</div>}
+    <div className="card border-dashed p-10 text-center shadow-none">
+      <p className="text-base font-semibold">{title}</p>
+      {children && (
+        <div className="mx-auto mt-2 max-w-[46ch] text-sm leading-relaxed text-muted">
+          {children}
+        </div>
+      )}
     </div>
   );
 }
@@ -28,16 +34,17 @@ export function Badge({
   tone = "neutral",
 }: {
   children: ReactNode;
-  tone?: "neutral" | "solid" | "quiet";
+  tone?: "neutral" | "solid" | "quiet" | "accent";
 }) {
   const tones = {
     neutral: "border border-line text-ink",
     solid: "bg-ink text-paper",
-    quiet: "bg-wash text-muted",
+    quiet: "bg-sunken text-muted",
+    accent: "bg-accent-tint text-accent-deep",
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${tones[tone]}`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${tones[tone]}`}
     >
       {children}
     </span>
@@ -49,10 +56,13 @@ export function Badge({
  * score was computed when the signal was ingested: a lead that was an 82 last
  * week is not an 82 today, and the tag is what makes that visible without
  * re-running scoring.
+ *
+ * Hot borrows the accent — a signal worth acting on today is exactly the kind of
+ * thing colour should be spent on.
  */
 export function FreshnessTag({ value }: { value: number }) {
   const band = freshnessLabel(value);
-  const tone = band === "hot" ? "solid" : band === "warm" ? "neutral" : "quiet";
+  const tone = band === "hot" ? "accent" : band === "warm" ? "neutral" : "quiet";
   return (
     <Badge tone={tone}>
       {band} · {Math.round(value * 100)}%
@@ -64,12 +74,15 @@ export function FreshnessTag({ value }: { value: number }) {
 export function ScoreBar({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <div className="flex items-baseline justify-between text-[11px] text-muted">
+      <div className="flex items-baseline justify-between text-xs text-muted">
         <span>{label}</span>
-        <span className="font-medium text-ink tabular-nums">{value}</span>
+        <span className="font-medium tabular-nums text-ink">{value}</span>
       </div>
-      <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-wash">
-        <div className="h-full rounded-full bg-ink" style={{ width: `${value}%` }} />
+      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-sunken">
+        <div
+          className="h-full rounded-full bg-ink transition-[width] duration-500"
+          style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
+        />
       </div>
     </div>
   );
@@ -77,9 +90,28 @@ export function ScoreBar({ label, value }: { label: string; value: number }) {
 
 export function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="card px-3 py-2.5">
-      <div className="text-lg font-semibold tabular-nums leading-none">{value}</div>
-      <div className="mt-1 text-[11px] text-muted">{label}</div>
+    <div className="card px-4 py-3">
+      <div className="text-2xl font-semibold leading-none tracking-[-0.02em] tabular-nums">
+        {value}
+      </div>
+      <div className="mt-1.5 text-xs text-muted">{label}</div>
+    </div>
+  );
+}
+
+/** The number a lead is judged on. Large, and the one place a figure gets colour. */
+export function ScoreDial({ value }: { value: number }) {
+  const hot = value >= 70;
+  return (
+    <div className="shrink-0 text-right">
+      <div
+        className={`text-3xl font-semibold leading-none tracking-[-0.03em] tabular-nums ${
+          hot ? "text-accent-deep" : "text-ink"
+        }`}
+      >
+        {value}
+      </div>
+      <div className="mt-1 text-xs text-muted">of 100</div>
     </div>
   );
 }

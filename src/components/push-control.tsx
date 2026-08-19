@@ -49,7 +49,7 @@ export function PushControl({
 
   if (!configured) {
     return (
-      <p className="text-[11px] text-muted">
+      <p className="text-xs text-muted">
         No outbound destination configured — add a Slack webhook or a CRM token in{" "}
         <code className="rounded bg-wash px-1">.env</code> to push leads out.
       </p>
@@ -72,7 +72,7 @@ export function PushControl({
       {outcomes.length > 0 && (
         <ul className="mt-2 space-y-1">
           {outcomes.map((o) => (
-            <li key={o.target} className="flex items-start gap-1.5 text-[11px] text-muted">
+            <li key={o.target} className="flex items-start gap-1.5 text-xs text-muted">
               {o.ok ? (
                 <Check size={11} className="mt-0.5 shrink-0 text-ink" />
               ) : (
@@ -86,7 +86,7 @@ export function PushControl({
         </ul>
       )}
 
-      {error && <p className="mt-2 text-[11px] text-muted">{error}</p>}
+      {error && <p className="mt-2 text-xs text-muted">{error}</p>}
     </div>
   );
 }

@@ -88,12 +88,12 @@ function SignalRow({ row }: { row: SignalFeedRow }) {
         {row.totalScore !== null && (
           <div className="shrink-0 text-right">
             <div className="text-xl font-semibold tabular-nums leading-none">{row.totalScore}</div>
-            <div className="text-[10px] text-muted">score</div>
+            <div className="text-xs text-muted">score</div>
           </div>
         )}
       </div>
 
-      <div className="mt-3 flex items-center gap-3 text-[11px] text-muted">
+      <div className="mt-3 flex items-center gap-3 text-xs text-muted">
         <span>{row.company}</span>
         {/* The event's own date where the source gave one — when it happened is
             what decides whether it is still worth acting on, not when we saw it. */}

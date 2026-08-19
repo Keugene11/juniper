@@ -11,6 +11,7 @@ import {
   FreshnessTag,
   PageHeader,
   ScoreBar,
+  ScoreDial,
   relativeTime,
 } from "@/components/ui";
 import { getProfile } from "@/lib/db";
@@ -164,7 +165,7 @@ function Onboarding() {
 
       <ProfileForm initial={null} />
 
-      <section className="card mt-4 p-4">
+      <section className="card mt-4 p-5">
         <h2 className="text-sm font-semibold">What happens after that</h2>
         <ol className="mt-3 space-y-3">
           <Step n={1} title="Choose who to watch">
@@ -196,7 +197,7 @@ function Onboarding() {
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <li className="flex gap-3">
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-wash text-[11px] font-medium tabular-nums">
+      <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-wash text-xs font-medium tabular-nums">
         {n}
       </span>
       <div className="min-w-0">
@@ -213,7 +214,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
 
   return (
     <article className="card overflow-hidden">
-      <div className="p-4">
+      <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold leading-snug">
@@ -225,12 +226,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
               {lead.domain ? ` · ${lead.domain}` : ""}
             </p>
           </div>
-          <div className="shrink-0 text-right">
-            <div className="text-2xl font-semibold tabular-nums leading-none">
-              {lead.totalScore}
-            </div>
-            <div className="text-[10px] text-muted">of 100</div>
-          </div>
+          <ScoreDial value={lead.totalScore} />
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-3">
@@ -243,12 +239,12 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
         <p className="mt-3 text-xs leading-relaxed text-muted">{lead.rationale}</p>
       </div>
 
-      <div className="border-t border-line bg-wash/60 p-4">
+      <div className="border-t border-line bg-wash p-5">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone="solid">{SIGNAL_LABEL[kind] ?? kind}</Badge>
           <Badge tone="quiet">{lead.signal.provider}</Badge>
           <FreshnessTag value={lead.signal.freshness} />
-          <span className="text-[11px] text-muted">
+          <span className="text-xs text-muted">
             {relativeTime(lead.signal.occurredAt ?? lead.signal.detectedAt)}
           </span>
         </div>
@@ -261,7 +257,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
           bug — and the reason names the fix, not just the symptom. */}
       {!sequenced && (
         <div className="border-t border-line bg-wash/60 px-4 py-3">
-          <p className="flex items-start gap-2 text-[11px] leading-relaxed text-muted">
+          <p className="flex items-start gap-2 text-xs leading-relaxed text-muted">
             {lead.skipReason ? (
               <ShieldOff size={12} className="mt-0.5 shrink-0" />
             ) : (
@@ -275,7 +271,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
         </div>
       )}
 
-      <div className="border-t border-line p-4">
+      <div className="border-t border-line p-5">
         {lead.email ? (
           <p className="flex flex-wrap items-center gap-2 text-xs">
             <Mail size={13} className="shrink-0" />
@@ -294,8 +290,8 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
         {sequenced && (
           <div className="mt-4 space-y-3">
             {lead.messages.map((m) => (
-              <div key={m.id} className="rounded-lg border border-line p-3">
-                <div className="flex items-center justify-between text-[11px] text-muted">
+              <div key={m.id} className="rounded-xl border border-line p-3">
+                <div className="flex items-center justify-between text-xs text-muted">
                   <span>{m.step === 0 ? "Opening message" : `Follow-up ${m.step}`}</span>
                   <span>{new Date(m.scheduledAt).toISOString().slice(0, 10)}</span>
                 </div>
@@ -305,7 +301,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
                 <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed">{m.body}</p>
               </div>
             ))}
-            <p className="text-[11px] text-muted">
+            <p className="text-xs text-muted">
               Drafts only — nothing is sent. Copy them into your own inbox, then mark what
               happened below.
             </p>

@@ -66,7 +66,7 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as SuppressionKind)}
-          className="press col-span-2 rounded-lg border border-line px-3 py-2 text-sm sm:col-span-1"
+          className="press col-span-2 rounded-xl border border-line px-3 py-2 text-sm sm:col-span-1"
         >
           <option value="domain">Domain</option>
           <option value="email">Email</option>
@@ -76,13 +76,13 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={kind === "domain" ? "acme.com" : kind === "email" ? "dana@acme.com" : "Dana Whitfield"}
-          className="col-span-2 rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
+          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
         />
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why (optional) — e.g. existing customer"
-          className="col-span-2 rounded-lg border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
       </div>
 
@@ -103,7 +103,7 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
             <li key={e.id} className="flex items-center gap-3 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">{e.value}</p>
-                <p className="truncate text-[11px] text-muted">
+                <p className="truncate text-xs text-muted">
                   {e.kind}
                   {e.reason ? ` · ${e.reason}` : ""}
                 </p>

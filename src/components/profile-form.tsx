@@ -47,12 +47,12 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
           onKeyDown={(e) => e.key === "Enter" && website && !busy && infer()}
           placeholder="acme.com"
           inputMode="url"
-          className="flex-1 rounded-lg border border-line px-3 py-2.5 text-sm outline-none focus:border-ink"
+          className="flex-1 rounded-xl border border-line px-3 py-2.5 text-sm outline-none focus:border-ink"
         />
         <button
           onClick={infer}
           disabled={busy || !website.trim()}
-          className="press flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-sm font-medium text-paper"
+          className="press flex items-center justify-center gap-2 btn-primary px-4 py-2.5 text-sm"
         >
           {busy ? <Loader2 size={15} className="spinning" /> : <Wand2 size={15} />}
           {busy ? "Reading site" : profile ? "Re-analyse" : "Analyse"}
@@ -88,12 +88,12 @@ function IcpList({ label, items }: { label: string; items: string[] }) {
   if (!items?.length) return null;
   return (
     <div>
-      <p className="text-[11px] text-muted">{label}</p>
+      <p className="text-xs text-muted">{label}</p>
       <div className="mt-1 flex flex-wrap gap-1.5">
         {items.map((item) => (
           <span
             key={item}
-            className="rounded-full border border-line px-2 py-0.5 text-[11px] leading-relaxed"
+            className="rounded-full border border-line px-2 py-0.5 text-xs leading-relaxed"
           >
             {item}
           </span>
