@@ -4,6 +4,7 @@ import { OutcomeControl } from "@/components/outcome-control";
 import { ProfileForm } from "@/components/profile-form";
 import { PushControl } from "@/components/push-control";
 import { RunButton } from "@/components/run-button";
+import { TargetBar } from "@/components/target-bar";
 import {
   Badge,
   Empty,
@@ -46,6 +47,8 @@ export default async function LeadsPage() {
 
   return (
     <>
+      <TargetBar profile={profile} />
+
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
