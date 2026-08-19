@@ -33,6 +33,15 @@ const BATCH_SIZE = 25;
  * a six-month-old trigger has nothing to open with, and a red-hot complaint
  * from a company you cannot serve is still a bad lead.
  */
+/**
+ * The one place the two component scores combine. Exported because a lead that
+ * is reconsidered on a later run reuses its stored fit judgement but recomputes
+ * intent, and that recombination has to use the same weights as the original.
+ */
+export function totalScoreFor(fitScore: number, intentScore: number): number {
+  return Math.round(clamp(fitScore) * FIT_WEIGHT + intentScore * INTENT_WEIGHT);
+}
+
 export async function scoreSignals(
   profile: Profile,
   signals: Signal[],
@@ -60,9 +69,7 @@ export async function scoreSignals(
         fitScore: clamp(verdict.fitScore),
         intentScore,
         freshness: freshness(signal.kind, at),
-        totalScore: Math.round(
-          clamp(verdict.fitScore) * FIT_WEIGHT + intentScore * INTENT_WEIGHT,
-        ),
+        totalScore: totalScoreFor(verdict.fitScore, intentScore),
         disqualified: verdict.disqualified,
         rationale: verdict.rationale,
       });

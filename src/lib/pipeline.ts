@@ -10,15 +10,22 @@ import {
   run,
   str,
 } from "./db";
-import { contactKey, contactKeys, matchSuppression } from "./contacts";
+import {
+  contactKey,
+  contactKeys,
+  matchSuppression,
+  type Suppression,
+} from "./contacts";
 import { enrichEmail } from "./enrichment";
 import { generateSequence, scheduleFor } from "./messaging";
 import { outboundConfigured, pushLead, type PushOutcome } from "./outbound";
 import { isLeadOutcome, type LeadOutcome } from "./outcomes";
-import { scoreSignals, type ScoredSignal } from "./scoring";
+import { scoreSignals, totalScoreFor, type ScoredSignal } from "./scoring";
 import { collectSignals } from "./signals/registry";
 import {
   freshness,
+  intentFor,
+  isSignalKind,
   SIGNAL_STRENGTH,
   type Signal,
   type SignalKind,
@@ -70,6 +77,11 @@ export interface RunStats {
   /** Dropped because their kind was not selected for this run. */
   signalsFiltered: number;
   signalsNew: number;
+  /**
+   * Leads that qualified on an earlier run but never got a sequence, picked up
+   * again by this one. Free — their fit judgement is reused, not re-requested.
+   */
+  carriedForward: number;
   scored: number;
   qualified: number;
   disqualified: number;
@@ -81,6 +93,11 @@ export interface RunStats {
   suppressed: number;
   /** Blocked because the same contact was sequenced inside the cooldown. */
   cooledDown: number;
+  /**
+   * Leads that cleared the gate but had no address for an email-channel
+   * sequence. They stay eligible, so a LinkedIn run picks them up unchanged.
+   */
+  noAddress: number;
   /** Leads sent to at least one outbound destination successfully. */
   pushed: number;
   providerErrors: { provider: string; error: string }[];
@@ -98,7 +115,23 @@ export interface RunStats {
  * copy written. Stopping early on purpose keeps the database consistent and
  * reports what was skipped.
  */
-const DEFAULT_BUDGET_MS = Number(process.env.JUNIPER_RUN_BUDGET_MS ?? 50_000);
+const DEFAULT_BUDGET_MS = Number(
+  // Only serverless imposes the ceiling. Locally the same 50s cut a run off
+  // mid-shortlist for no reason, so the budget there is generous enough to
+  // finish what the gate allowed.
+  process.env.JUNIPER_RUN_BUDGET_MS ?? (process.env.VERCEL ? 50_000 : 300_000),
+);
+
+/**
+ * How much of the budget to hold back for the lead about to start.
+ *
+ * The deadline alone is not enough: one lead is an enrichment lookup plus a
+ * model call — tens of seconds — so a lead that starts a moment before the
+ * deadline finishes long after it, which is the mid-write kill the budget
+ * exists to prevent. The reserve is only a seed; once a lead has actually been
+ * timed, the run trusts the measurement over the guess.
+ */
+const LEAD_RESERVE_MS = Number(process.env.JUNIPER_LEAD_RESERVE_MS ?? 25_000);
 
 /**
  * The five stages end to end: ingest -> score -> filter -> enrich -> write.
@@ -131,6 +164,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     signalsFound: 0,
     signalsFiltered: 0,
     signalsNew: 0,
+    carriedForward: 0,
     scored: 0,
     qualified: 0,
     disqualified: 0,
@@ -139,6 +173,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     deduped: 0,
     suppressed: 0,
     cooledDown: 0,
+    noAddress: 0,
     pushed: 0,
     providerErrors: [],
     providerWarnings: [],
@@ -180,7 +215,6 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     const fresh: Signal[] = [];
     for (const s of selected) if (await persistSignal(s)) fresh.push(s);
     stats.signalsNew = fresh.length;
-    if (fresh.length === 0) return await finish(runId, stats, started);
 
     // 2. Score -------------------------------------------------------------
     const scored = await scoreSignals(profile, fresh);
@@ -235,7 +269,19 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     // first would let six signals for one company consume the whole run budget
     // and produce a single sequence; gating first spends that budget on six
     // distinct people.
-    const qualified = scored.filter((s) => !s.disqualified && s.totalScore >= threshold);
+    const freshlyQualified = scored.filter(
+      (s) => !s.disqualified && s.totalScore >= threshold,
+    );
+    // Ingestion dedupe means a signal is only ever "new" once, so a lead that
+    // qualified but never got a sequence — the run hit maxOutreach or its time
+    // budget, or the channel wanted an address the waterfall could not find —
+    // would otherwise sit at 'scored' forever, and re-running with different
+    // settings would have nothing to work on.
+    const carried = await carryForward(threshold, new Set(fresh.map((f) => f.dedupeKey)));
+    stats.carriedForward = carried.length;
+    const qualified = [...freshlyQualified, ...carried].sort(
+      (a, b) => b.totalScore - a.totalScore,
+    );
     const gate = await gateContacts(qualified, cooldownDays);
     stats.deduped = gate.deduped;
     stats.suppressed = gate.suppressed;
@@ -245,11 +291,21 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     }
     const shortlist = gate.allowed.slice(0, maxOutreach);
 
+    // Measured from the previous iteration rather than inside this one, so a
+    // lead that exits early through any of the `continue`s below still gets
+    // its true cost recorded.
+    let leadCostMs = LEAD_RESERVE_MS;
+    let iterationStarted = 0;
+
     for (const s of shortlist) {
-      if (Date.now() > deadline) {
+      if (iterationStarted > 0) {
+        leadCostMs = Math.max(leadCostMs, Date.now() - iterationStarted);
+      }
+      if (Date.now() + leadCostMs > deadline) {
         stats.truncated = true;
         break;
       }
+      iterationStarted = Date.now();
 
       const signalId = await signalIdFor(s.signal.dedupeKey);
       if (!signalId) continue;
@@ -298,8 +354,13 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
       );
 
       // An email-channel sequence with no address is not sendable; LinkedIn
-      // messages don't need one.
-      if (channel === "email" && !enrichment.email) continue;
+      // messages don't need one. Counted rather than dropped silently: a run
+      // that qualifies twelve leads and writes nothing has to explain itself.
+      // No skip_reason is written, so the lead stays eligible for a later run.
+      if (channel === "email" && !enrichment.email) {
+        stats.noAddress++;
+        continue;
+      }
 
       try {
         const seq = await generateSequence(profile, s.signal, channel);
@@ -342,6 +403,76 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
   }
 }
 
+// -------------------------------------------------------- carried-forward
+
+/**
+ * Leads that qualified on an earlier run but never got a sequence.
+ *
+ * A signal is only ever new once, so these cannot come back through ingestion.
+ * Leads carrying a `skip_reason` are excluded: the gate made a decision about
+ * those, and re-litigating it every run would undo the cooldown.
+ *
+ * Fit is reused from the stored row — that judgement is about the company and
+ * does not change — but intent is recomputed from the event's own timestamp, so
+ * a lead that has gone cold since it was scored falls below the threshold on
+ * its own rather than being retried forever. The stored `total_score` is left
+ * alone: the card shows the score at ingestion time by design.
+ */
+async function carryForward(threshold: number, exclude: Set<string>): Promise<ScoredSignal[]> {
+  const rows = await query(
+    `SELECT s.provider, s.kind, s.company, s.domain, s.person_name, s.person_title,
+            s.headline, s.evidence, s.url, s.detected_at, s.occurred_at, s.dedupe_key,
+            l.fit_score, l.rationale
+       FROM leads l
+       JOIN signals s ON s.id = l.signal_id
+      WHERE l.disqualified = 0
+        AND l.skip_reason IS NULL
+        AND l.status IN ('scored', 'enriched')
+        AND NOT EXISTS (SELECT 1 FROM messages m WHERE m.lead_id = l.id)`,
+  );
+
+  const out: ScoredSignal[] = [];
+  for (const r of rows) {
+    const dedupeKey = str(r.dedupe_key);
+    if (exclude.has(dedupeKey)) continue;
+
+    const kind = str(r.kind);
+    if (!isSignalKind(kind)) continue;
+
+    const signal: Signal = {
+      provider: str(r.provider),
+      kind,
+      company: str(r.company),
+      domain: nstr(r.domain),
+      personName: nstr(r.person_name),
+      personTitle: nstr(r.person_title),
+      headline: str(r.headline),
+      evidence: str(r.evidence),
+      url: nstr(r.url),
+      detectedAt: str(r.detected_at),
+      occurredAt: nstr(r.occurred_at),
+      dedupeKey,
+    };
+
+    const at = signal.occurredAt ?? signal.detectedAt;
+    const intentScore = intentFor(kind, at);
+    const fitScore = num(r.fit_score);
+    const totalScore = totalScoreFor(fitScore, intentScore);
+    if (totalScore < threshold) continue;
+
+    out.push({
+      signal,
+      fitScore,
+      intentScore,
+      freshness: freshness(kind, at),
+      totalScore,
+      disqualified: false,
+      rationale: str(r.rationale),
+    });
+  }
+  return out;
+}
+
 // ------------------------------------------------------------ contact gate
 
 /**
@@ -381,14 +512,9 @@ export async function gateContacts(
   candidates: ScoredSignal[],
   cooldownDays: number = DEFAULT_COOLDOWN_DAYS,
 ): Promise<GateResult> {
-  const out: GateResult = {
-    allowed: [],
-    skipped: [],
-    deduped: 0,
-    suppressed: 0,
-    cooledDown: 0,
-  };
-  if (candidates.length === 0) return out;
+  if (candidates.length === 0) {
+    return { allowed: [], skipped: [], deduped: 0, suppressed: 0, cooledDown: 0 };
+  }
 
   const suppressions = await listSuppressions();
   const history = await contactHistory(
@@ -401,7 +527,35 @@ export async function gateContacts(
     ),
   );
 
-  const cutoff = Date.now() - cooldownDays * 86_400_000;
+  return decideContacts(candidates, suppressions, history, cooldownDays);
+}
+
+/**
+ * The gate's actual decision, separated from the two queries that feed it.
+ *
+ * Split out because this is the most consequential logic in the pipeline and
+ * the hardest to reach: it used to sit behind a database *and* the model calls
+ * that produce its input, so the only way to exercise a cooldown or a
+ * precedence rule was to run the whole thing for real. As a pure function over
+ * (candidates, suppressions, history) every branch is reachable from a test.
+ */
+export function decideContacts(
+  candidates: ScoredSignal[],
+  suppressions: Suppression[],
+  history: Map<string, PriorContact>,
+  cooldownDays: number = DEFAULT_COOLDOWN_DAYS,
+  at: number = Date.now(),
+): GateResult {
+  const out: GateResult = {
+    allowed: [],
+    skipped: [],
+    deduped: 0,
+    suppressed: 0,
+    cooledDown: 0,
+  };
+  if (candidates.length === 0) return out;
+
+  const cutoff = at - cooldownDays * 86_400_000;
   /** Contact keys claimed by an earlier, higher-scoring candidate this run. */
   const claimed = new Map<string, string>();
 
@@ -453,7 +607,7 @@ export async function gateContacts(
   return out;
 }
 
-interface PriorContact {
+export interface PriorContact {
   leadId: number;
   outcome: string;
   /**

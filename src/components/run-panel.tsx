@@ -177,6 +177,8 @@ function RunSummary({ stats }: { stats: RunStats }) {
         Finished in {(stats.durationMs / 1000).toFixed(1)}s.
         {stats.signalsFiltered > 0 &&
           ` ${stats.signalsFiltered} dropped by the trigger filter before scoring.`}
+        {stats.carriedForward > 0 &&
+          ` ${stats.carriedForward} lead${stats.carriedForward === 1 ? "" : "s"} carried forward from earlier runs.`}
         {stats.pushed > 0 && ` ${stats.pushed} pushed to outbound destinations.`}
         {stats.truncated &&
           " Stopped early to stay inside the request time budget — run again to continue."}
@@ -196,6 +198,16 @@ function RunSummary({ stats }: { stats: RunStats }) {
             .filter(Boolean)
             .join(", ")}
           . Each one is on the Leads tab with the reason.
+        </p>
+      )}
+
+      {stats.noAddress > 0 && (
+        <p className="mt-2 text-[11px] leading-relaxed text-muted">
+          {stats.noAddress} lead{stats.noAddress === 1 ? "" : "s"} cleared the gate but no
+          email address could be found, so no copy was written. Company-level triggers
+          (hiring spikes, funding) name no person, and the pattern waterfall needs one.
+          Switch the channel to LinkedIn, or set HUNTER_API_KEY / APOLLO_API_KEY. They stay
+          eligible either way — the next run picks them up.
         </p>
       )}
 
