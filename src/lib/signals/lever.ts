@@ -15,7 +15,11 @@ interface LeverPosting {
 }
 
 const RECENT_DAYS = 45;
-const SPIKE_THRESHOLD = 4;
+// Must match Greenhouse and Ashby. These three implement one rule against three
+// APIs, so a board that disagreed would classify the same company differently
+// depending on which ATS it happens to use — and then `hiring_spike` on the
+// Activity tab would be averaging two different definitions together.
+const SPIKE_THRESHOLD = 5;
 
 /** Same hiring-spike logic as Greenhouse, against Lever's public postings API. */
 export const leverProvider: SignalProvider = {

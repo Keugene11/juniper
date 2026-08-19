@@ -14,7 +14,7 @@
     "seed": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/seed.ts",
     "verify": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts",
     "verify:unipile": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify-unipile.ts",
-    "test": "node --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs --test src/lib/contacts.test.ts src/lib/db.test.ts src/lib/icp.test.ts src/lib/signals/relevance.test.ts src/lib/signals/decay.test.ts src/lib/signals/greenhouse.test.ts src/lib/signals/registry.test.ts"
+    "test": "node --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",
