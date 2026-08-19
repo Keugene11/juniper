@@ -12,7 +12,8 @@
     "start": "node scripts/run-next.mjs start",
     "typecheck": "tsc --noEmit",
     "seed": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/seed.ts",
-    "verify": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts"
+    "verify": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts",
+    "verify:unipile": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify-unipile.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",

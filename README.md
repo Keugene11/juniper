@@ -126,9 +126,16 @@ indistinguishable from one that ran and found nothing:
   per-provider limit modest. Paid — their free tier was withdrawn.
 - **Unipile** (`UNIPILE_DSN` / `UNIPILE_API_KEY`) — LinkedIn reactions and
   comments on posts you watch, through an account *you* connect. Watchlist
-  handles are LinkedIn post ids rather than board slugs. See the note below on
-  why this exists next to the LinkedIn stub. Written against Unipile's published
-  API reference but not yet exercised against a live tenant.
+  handles are LinkedIn post URLs rather than board slugs; Unipile addresses
+  posts by their `urn:li:activity:...` social id, so the provider resolves a
+  pasted URL to one rather than making you build it by hand. See the note below
+  on why this exists next to the LinkedIn stub. Written against Unipile's
+  published API reference and still not exercised against a live tenant, so the
+  response mapping is covered by `pnpm verify:unipile`, which drives the
+  provider against stubbed payloads shaped like their reference — reactions put
+  the person in `author`, comments put the name in `author` and the rest in
+  `author_details`, and company pages are dropped rather than sequenced as
+  people.
 
 Not implemented:
 
