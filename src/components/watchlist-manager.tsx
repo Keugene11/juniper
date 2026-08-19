@@ -49,7 +49,7 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
 
   return (
     <section className="card p-4">
-      <h2 className="text-sm font-semibold">Watchlist</h2>
+      <h2 className="text-sm font-medium">Watchlist</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         Companies to monitor for hiring signals. The handle is the slug in their board URL —
         e.g. <code className="rounded bg-wash px-1">stripe</code> for{" "}
@@ -62,7 +62,7 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value)}
-          className="press col-span-2 rounded-xl border border-line px-3 py-2 text-sm sm:col-span-1"
+          className="press col-span-2 rounded-full border border-line px-3 py-2 text-sm sm:col-span-1"
         >
           <option value="greenhouse">Greenhouse</option>
           <option value="lever">Lever</option>
@@ -73,26 +73,26 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
           placeholder="board handle"
-          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
+          className="col-span-2 rounded-full border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
         />
         <input
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           placeholder="Company name"
-          className="rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="rounded-full border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
         <input
           value={domain}
           onChange={(e) => setDomain(e.target.value)}
           placeholder="domain.com"
-          className="rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="rounded-full border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
       </div>
 
       <button
         onClick={add}
         disabled={busy || !handle.trim() || !label.trim()}
-        className="press mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-ink px-4 py-2.5 text-sm font-medium"
+        className="press mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-ink px-4 py-2.5 text-sm font-medium"
       >
         {busy ? <Loader2 size={15} className="spinning" /> : <Plus size={15} />}
         Add to watchlist
@@ -115,7 +115,7 @@ export function WatchlistManager({ initial }: { initial: WatchlistEntry[] }) {
                 onClick={() => send({ method: "DELETE" }, `/api/watchlist?id=${e.id}`)}
                 disabled={busy}
                 aria-label={`Remove ${e.label}`}
-                className="press rounded-lg p-2 text-muted hover:bg-wash"
+                className="press rounded-full p-2 text-muted hover:bg-wash"
               >
                 <Trash2 size={15} />
               </button>

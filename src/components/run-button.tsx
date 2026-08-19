@@ -59,7 +59,7 @@ export function RunButton({ ready }: { ready: boolean }) {
       )}
 
       {error && (
-        <div className="mt-2 flex items-start gap-2 rounded-lg bg-wash p-3 text-xs leading-relaxed">
+        <div className="mt-2 flex items-start gap-2 rounded-2xl bg-wash p-3 text-xs leading-relaxed">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>

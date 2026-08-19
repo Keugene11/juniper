@@ -87,7 +87,7 @@ function SignalRow({ row }: { row: SignalFeedRow }) {
 
         {row.totalScore !== null && (
           <div className="shrink-0 text-right">
-            <div className="text-xl font-semibold tabular-nums leading-none">{row.totalScore}</div>
+            <div className="text-xl font-medium tabular-nums leading-none">{row.totalScore}</div>
             <div className="text-xs text-muted">score</div>
           </div>
         )}

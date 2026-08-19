@@ -30,7 +30,7 @@ export default async function SetupPage() {
       <div className="space-y-4">
         {isUnconfigured() && (
           <div className="card border-dashed p-4">
-            <p className="text-sm font-semibold">No database configured</p>
+            <p className="text-sm font-medium">No database configured</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
               Nothing can be saved or read until a database is reachable. Set{" "}
               <code className="rounded bg-wash px-1">DATABASE_URL</code> to a Neon Postgres
@@ -44,7 +44,7 @@ export default async function SetupPage() {
         <SuppressionManager initial={suppressions} />
 
         <section className="card p-5">
-          <h2 className="text-sm font-semibold">Signal sources</h2>
+          <h2 className="text-sm font-medium">Signal sources</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             A source that needs credentials stays listed and names the variable it wants — an
             unconfigured source that quietly vanished would be indistinguishable from one that
@@ -76,7 +76,7 @@ export default async function SetupPage() {
         </section>
 
         <section className="card p-5">
-          <h2 className="text-sm font-semibold">Outbound destinations</h2>
+          <h2 className="text-sm font-medium">Outbound destinations</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Where a finished lead gets pushed. Unlike the email waterfall these are not
             alternatives to each other — every configured destination receives every pushed
@@ -98,7 +98,7 @@ export default async function SetupPage() {
         </section>
 
         <section className="card p-5">
-          <h2 className="text-sm font-semibold">Email waterfall</h2>
+          <h2 className="text-sm font-medium">Email waterfall</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted">
             Tried in order until one returns an address. Pattern inference needs no account: it
             builds the common corporate format and confirms the domain accepts mail via MX

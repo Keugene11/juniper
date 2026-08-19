@@ -49,7 +49,7 @@ export default async function ActivityPage() {
       </div>
 
       <section className="card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Funnel</h2>
+        <h2 className="text-sm font-medium">Funnel</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Each stage is a filter, so the drop between rows is the point rather than a loss.
           The last three rows come from outcomes you record on the Leads tab — Juniper never
@@ -68,7 +68,7 @@ export default async function ActivityPage() {
       </section>
 
       <section className="card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Trigger performance</h2>
+        <h2 className="text-sm font-medium">Trigger performance</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Reply rate per trigger type, against the intent weight the taxonomy assumes. Where a
           heavily weighted trigger keeps failing to produce replies for your ICP, the weight is
@@ -76,7 +76,7 @@ export default async function ActivityPage() {
         </p>
 
         {totals.contacted === 0 && (
-          <p className="mt-3 flex items-start gap-2 rounded-lg bg-wash p-3 text-xs leading-relaxed">
+          <p className="mt-3 flex items-start gap-2 rounded-2xl bg-wash p-3 text-xs leading-relaxed">
             <CircleAlert size={13} className="mt-px shrink-0" />
             No outcomes recorded yet, so reply rates are blank. Mark leads as contacted or
             replied on the Leads tab to start measuring.
@@ -105,7 +105,7 @@ export default async function ActivityPage() {
       </section>
 
       <section className="card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Source quality</h2>
+        <h2 className="text-sm font-medium">Source quality</h2>
         <p className="mt-1 text-xs leading-relaxed text-muted">
           Share of each source&apos;s scored signals that survived ICP filtering. A source
           producing volume and no qualified leads is spending scoring calls for nothing —
@@ -119,7 +119,7 @@ export default async function ActivityPage() {
       </section>
 
       <section className="card mt-4 p-5">
-        <h2 className="text-sm font-semibold">Recent runs</h2>
+        <h2 className="text-sm font-medium">Recent runs</h2>
         <ul className="mt-2 divide-y divide-line">
           {runs.map((r) => (
             <RunRow key={r.id} run={r} />

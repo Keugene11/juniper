@@ -52,8 +52,8 @@ export default async function LeadsPage() {
 
       <div className="mb-5 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight">Leads</h1>
-          <p className="mt-1 text-sm leading-relaxed text-muted">
+          <h1 className="display text-[38px] md:text-[44px]">Leads</h1>
+          <p className="mt-3 text-[17px] leading-relaxed text-muted">
             {leads.length === 0
               ? `Nothing yet. Run the pipeline to find companies showing intent that match ${profile.companyName}'s ICP.`
               : summarise(ready.length, blocked.length)}
@@ -122,7 +122,7 @@ function Section({
   return (
     <section>
       <div className="mb-2 flex items-baseline gap-2">
-        <h2 className="text-sm font-semibold">{title}</h2>
+        <h2 className="text-sm font-medium">{title}</h2>
         <span className="text-xs tabular-nums text-muted">{count}</span>
       </div>
       {note && <p className="mb-3 text-xs leading-relaxed text-muted">{note}</p>}
@@ -166,7 +166,7 @@ function Onboarding() {
       <ProfileForm initial={null} />
 
       <section className="card mt-4 p-5">
-        <h2 className="text-sm font-semibold">What happens after that</h2>
+        <h2 className="text-sm font-medium">What happens after that</h2>
         <ol className="mt-3 space-y-3">
           <Step n={1} title="Choose who to watch">
             Add companies on the{" "}
@@ -217,7 +217,7 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
       <div className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold leading-snug">
+            <h2 className="text-sm font-medium leading-snug">
               {lead.personName ?? lead.company}
             </h2>
             <p className="text-xs text-muted">
@@ -290,13 +290,13 @@ function LeadCard({ lead, canPush }: { lead: LeadView; canPush: boolean }) {
         {sequenced && (
           <div className="mt-4 space-y-3">
             {lead.messages.map((m) => (
-              <div key={m.id} className="rounded-xl border border-line p-3">
+              <div key={m.id} className="rounded-2xl border border-line p-3">
                 <div className="flex items-center justify-between text-xs text-muted">
                   <span>{m.step === 0 ? "Opening message" : `Follow-up ${m.step}`}</span>
                   <span>{new Date(m.scheduledAt).toISOString().slice(0, 10)}</span>
                 </div>
                 {m.subject && (
-                  <p className="mt-1.5 text-xs font-semibold">Subject: {m.subject}</p>
+                  <p className="mt-1.5 text-xs font-medium">Subject: {m.subject}</p>
                 )}
                 <p className="mt-1.5 whitespace-pre-wrap text-xs leading-relaxed">{m.body}</p>
               </div>

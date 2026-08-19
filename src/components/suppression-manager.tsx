@@ -51,7 +51,7 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
 
   return (
     <section className="card p-4">
-      <h2 className="flex items-center gap-2 text-sm font-semibold">
+      <h2 className="flex items-center gap-2 text-sm font-medium">
         <ShieldOff size={14} />
         Never contact
       </h2>
@@ -66,7 +66,7 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as SuppressionKind)}
-          className="press col-span-2 rounded-xl border border-line px-3 py-2 text-sm sm:col-span-1"
+          className="press col-span-2 rounded-full border border-line px-3 py-2 text-sm sm:col-span-1"
         >
           <option value="domain">Domain</option>
           <option value="email">Email</option>
@@ -76,20 +76,20 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder={kind === "domain" ? "acme.com" : kind === "email" ? "dana@acme.com" : "Dana Whitfield"}
-          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
+          className="col-span-2 rounded-full border border-line px-3 py-2 text-sm outline-none focus:border-ink sm:col-span-1"
         />
         <input
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Why (optional) — e.g. existing customer"
-          className="col-span-2 rounded-xl border border-line px-3 py-2 text-sm outline-none focus:border-ink"
+          className="col-span-2 rounded-full border border-line px-3 py-2 text-sm outline-none focus:border-ink"
         />
       </div>
 
       <button
         onClick={add}
         disabled={busy || !value.trim()}
-        className="press mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-ink px-4 py-2.5 text-sm font-medium"
+        className="press mt-2 flex w-full items-center justify-center gap-2 rounded-full border border-ink px-4 py-2.5 text-sm font-medium"
       >
         {busy ? <Loader2 size={15} className="spinning" /> : <Plus size={15} />}
         Add to never-contact
@@ -112,7 +112,7 @@ export function SuppressionManager({ initial }: { initial: Suppression[] }) {
                 onClick={() => send({ method: "DELETE" }, `/api/suppressions?id=${e.id}`)}
                 disabled={busy}
                 aria-label={`Remove ${e.value}`}
-                className="press rounded-lg p-2 text-muted hover:bg-wash"
+                className="press rounded-full p-2 text-muted hover:bg-wash"
               >
                 <Trash2 size={15} />
               </button>

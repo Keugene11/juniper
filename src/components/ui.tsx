@@ -4,9 +4,9 @@ import { freshnessLabel } from "@/lib/signals/types";
 export function PageHeader({ title, sub }: { title: string; sub?: string }) {
   return (
     <div className="mb-6">
-      <h1 className="text-3xl font-semibold tracking-[-0.03em]">{title}</h1>
+      <h1 className="display text-[38px] md:text-[44px]">{title}</h1>
       {sub && (
-        <p className="mt-2 max-w-[58ch] text-[15px] leading-relaxed text-muted">{sub}</p>
+        <p className="mt-3 max-w-[58ch] text-[17px] leading-relaxed text-muted">{sub}</p>
       )}
     </div>
   );
@@ -19,7 +19,7 @@ export function Card({ children, className = "" }: { children: ReactNode; classN
 export function Empty({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div className="card border-dashed p-10 text-center shadow-none">
-      <p className="text-base font-semibold">{title}</p>
+      <p className="text-base font-medium">{title}</p>
       {children && (
         <div className="mx-auto mt-2 max-w-[46ch] text-sm leading-relaxed text-muted">
           {children}
@@ -91,7 +91,7 @@ export function ScoreBar({ label, value }: { label: string; value: number }) {
 export function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="card px-4 py-3">
-      <div className="text-2xl font-semibold leading-none tracking-[-0.02em] tabular-nums">
+      <div className="headline text-[28px] tabular-nums">
         {value}
       </div>
       <div className="mt-1.5 text-xs text-muted">{label}</div>
@@ -105,7 +105,7 @@ export function ScoreDial({ value }: { value: number }) {
   return (
     <div className="shrink-0 text-right">
       <div
-        className={`text-3xl font-semibold leading-none tracking-[-0.03em] tabular-nums ${
+        className={`display text-[34px] tabular-nums ${
           hot ? "text-accent-deep" : "text-ink"
         }`}
       >

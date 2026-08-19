@@ -110,7 +110,7 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
           <select
             value={channel}
             onChange={(e) => setChannel(e.target.value as "email" | "linkedin")}
-            className="press mt-1 w-full rounded-xl border border-line px-3 py-2 text-sm"
+            className="press mt-1 w-full rounded-full border border-line px-3 py-2 text-sm"
           >
             <option value="email">Email</option>
             <option value="linkedin">LinkedIn</option>
@@ -140,7 +140,7 @@ export function RunPanel({ ready, kinds }: { ready: boolean; kinds: SignalKind[]
       )}
 
       {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-wash p-3 text-xs leading-relaxed">
+        <div className="mt-3 flex items-start gap-2 rounded-2xl bg-wash p-3 text-xs leading-relaxed">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -168,7 +168,7 @@ function RunSummary({ stats }: { stats: RunStats }) {
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
         {rows.map(([label, value]) => (
           <div key={label}>
-            <div className="text-base font-semibold tabular-nums leading-none">{value}</div>
+            <div className="text-base font-medium tabular-nums leading-none">{value}</div>
             <div className="mt-1 text-xs leading-tight text-muted">{label}</div>
           </div>
         ))}

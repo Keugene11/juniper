@@ -40,11 +40,11 @@ export function TargetBar({ profile }: { profile: Profile }) {
   return (
     <div className="card mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
       <span className="text-xs uppercase tracking-wide text-muted">Finding leads for</span>
-      <span className="text-sm font-semibold">{profile.companyName}</span>
+      <span className="text-sm font-medium">{profile.companyName}</span>
       <span className="text-xs text-muted">{hostOf(profile.website)}</span>
       <button
         onClick={() => setEditing(true)}
-        className="press ml-auto inline-flex items-center gap-1.5 rounded-xl border border-line px-2.5 py-1.5 text-xs font-medium"
+        className="press ml-auto inline-flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1.5 text-xs font-medium"
       >
         <Pencil size={12} />
         Change

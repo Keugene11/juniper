@@ -34,7 +34,7 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
 
   return (
     <section className="card p-4">
-      <h2 className="text-sm font-semibold">Your targeting profile</h2>
+      <h2 className="text-sm font-medium">Your targeting profile</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         Paste your site. It gets crawled and read to work out what you sell, who buys it, and
         which public phrases to watch for.
@@ -47,7 +47,7 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
           onKeyDown={(e) => e.key === "Enter" && website && !busy && infer()}
           placeholder="acme.com"
           inputMode="url"
-          className="flex-1 rounded-xl border border-line px-3 py-2.5 text-sm outline-none focus:border-ink"
+          className="flex-1 rounded-full border border-line px-3 py-2.5 text-sm outline-none focus:border-ink"
         />
         <button
           onClick={infer}
@@ -60,7 +60,7 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
       </div>
 
       {error && (
-        <div className="mt-3 flex items-start gap-2 rounded-lg bg-wash p-3 text-xs leading-relaxed">
+        <div className="mt-3 flex items-start gap-2 rounded-2xl bg-wash p-3 text-xs leading-relaxed">
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -69,7 +69,7 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
       {profile && (
         <div className="mt-4 space-y-3 border-t border-line pt-4">
           <div>
-            <p className="text-sm font-semibold">{profile.companyName}</p>
+            <p className="text-sm font-medium">{profile.companyName}</p>
             <p className="mt-0.5 text-xs leading-relaxed text-muted">{profile.valueProp}</p>
           </div>
           <IcpList label="Buyer titles" items={profile.icp.buyerTitles} />

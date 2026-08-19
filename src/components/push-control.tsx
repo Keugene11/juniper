@@ -61,7 +61,7 @@ export function PushControl({
       <button
         onClick={push}
         disabled={busy}
-        className="press flex items-center gap-2 rounded-lg border border-ink px-3 py-1.5 text-xs font-medium"
+        className="press flex items-center gap-2 rounded-full border border-ink px-3 py-1.5 text-xs font-medium"
       >
         {busy ? <Loader2 size={13} className="spinning" /> : <Send size={13} />}
         {done ? "Push again" : "Push to destinations"}
