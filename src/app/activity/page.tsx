@@ -29,10 +29,10 @@ export default async function ActivityPage() {
         <Empty title="Nothing to report yet">
           Run the pipeline from the{" "}
           <Link href="/" className="press underline">
-            Signals
+            Leads
           </Link>{" "}
-          tab. This tab fills in once signals have been scored and you have recorded what
-          happened to the leads.
+          tab. This fills in once signals have been scored and you have marked what happened to
+          the leads — reply rate per trigger is the whole point, and it needs those outcomes.
         </Empty>
       </>
     );

@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BarChart3, Radio, Send, SlidersHorizontal } from "lucide-react";
 
+// Leads first: it is the output, and the reason anyone opens this. Signals is
+// where you go to ask why something did or did not become one.
 const TABS = [
-  { href: "/", label: "Signals", Icon: Radio },
-  { href: "/leads", label: "Leads", Icon: Send },
+  { href: "/", label: "Leads", Icon: Send },
+  { href: "/signals", label: "Signals", Icon: Radio },
   { href: "/activity", label: "Activity", Icon: BarChart3 },
   { href: "/setup", label: "Setup", Icon: SlidersHorizontal },
 ];
