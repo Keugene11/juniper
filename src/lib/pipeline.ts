@@ -123,8 +123,8 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
 
   const started = Date.now();
   const deadline = started + DEFAULT_BUDGET_MS;
-  const runRes = await run("INSERT INTO runs (started_at) VALUES (?)", [now()]);
-  const runId = Number(runRes.lastInsertRowid ?? 0);
+  const runRes = await run("INSERT INTO runs (started_at) VALUES (?) RETURNING id", [now()]);
+  const runId = num(runRes.rows[0].id);
 
   const stats: RunStats = {
     runId,
@@ -589,13 +589,14 @@ async function recordSkip(dedupeKey: string, reason: string): Promise<void> {
 
 // ------------------------------------------------------------------ helpers
 
-/** Returns true when the signal was new (INSERT OR IGNORE actually inserted). */
+/** Returns true when the signal was new (the insert was not a dedupe collision). */
 async function persistSignal(s: Signal): Promise<boolean> {
   const res = await run(
-    `INSERT OR IGNORE INTO signals
+    `INSERT INTO signals
        (provider, kind, company, domain, person_name, person_title,
         headline, evidence, url, strength, detected_at, occurred_at, dedupe_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (dedupe_key) DO NOTHING`,
     [
       s.provider,
       s.kind,

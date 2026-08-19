@@ -1,24 +1,26 @@
-import { createClient, type Client, type InValue } from "@libsql/client";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import {
   normaliseSuppression,
   type Suppression,
   type SuppressionKind,
 } from "./contacts";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 
 /**
- * libsql speaks SQLite, so the same schema runs against a local file in dev and
- * a hosted Turso database in production — serverless filesystems are ephemeral
- * and not shared between invocations, so a local file cannot be the store there.
+ * Storage is Postgres, reached over Neon's HTTP driver rather than a socket:
+ * serverless invocations are short and unpooled, so a per-request TCP handshake
+ * to a normal Postgres would cost more than the queries do.
  *
- * Set TURSO_DATABASE_URL (+ TURSO_AUTH_TOKEN) to use the hosted database;
- * otherwise it falls back to ./data/juniper.db.
+ * Set DATABASE_URL (Vercel's Neon integration also sets POSTGRES_URL). There is
+ * no local-file fallback — unlike SQLite there is no such thing as an embedded
+ * Postgres, so an unset URL is a configuration error rather than a degraded
+ * mode, and it says so on the first query instead of pretending to work.
  */
-let client: Client | null = null;
-let ready: Promise<Client> | null = null;
+let client: NeonQueryFunction<false, true> | null = null;
+let ready: Promise<NeonQueryFunction<false, true>> | null = null;
 
-const LOCAL_PATH = process.env.JUNIPER_DB_PATH || "./data/juniper.db";
+function connectionString(): string | undefined {
+  return process.env.DATABASE_URL || process.env.POSTGRES_URL;
+}
 
 const SCHEMA = [
   `CREATE TABLE IF NOT EXISTS profile (
@@ -30,7 +32,7 @@ const SCHEMA = [
     updated_at   TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS watchlist (
-    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    id       INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     provider TEXT NOT NULL,
     handle   TEXT NOT NULL,
     label    TEXT NOT NULL,
@@ -38,7 +40,7 @@ const SCHEMA = [
     UNIQUE (provider, handle)
   )`,
   `CREATE TABLE IF NOT EXISTS signals (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     provider     TEXT NOT NULL,
     kind         TEXT NOT NULL,
     company      TEXT NOT NULL,
@@ -54,7 +56,7 @@ const SCHEMA = [
     dedupe_key   TEXT NOT NULL UNIQUE
   )`,
   `CREATE TABLE IF NOT EXISTS leads (
-    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    id               INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     signal_id        INTEGER NOT NULL REFERENCES signals(id) ON DELETE CASCADE,
     company          TEXT NOT NULL,
     domain           TEXT,
@@ -81,7 +83,7 @@ const SCHEMA = [
     UNIQUE (signal_id)
   )`,
   `CREATE TABLE IF NOT EXISTS messages (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    id           INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     lead_id      INTEGER NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
     channel      TEXT NOT NULL,
     step         INTEGER NOT NULL,
@@ -92,7 +94,7 @@ const SCHEMA = [
     status       TEXT NOT NULL DEFAULT 'queued'
   )`,
   `CREATE TABLE IF NOT EXISTS suppressions (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    id         INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     kind       TEXT NOT NULL,
     value      TEXT NOT NULL,
     reason     TEXT NOT NULL DEFAULT '',
@@ -100,7 +102,7 @@ const SCHEMA = [
     UNIQUE (kind, value)
   )`,
   `CREATE TABLE IF NOT EXISTS runs (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    id          INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     started_at  TEXT NOT NULL,
     finished_at TEXT,
     ok          INTEGER NOT NULL DEFAULT 0,
@@ -115,19 +117,19 @@ const SCHEMA = [
 /**
  * Columns added after the first release. `CREATE TABLE IF NOT EXISTS` is a
  * no-op on an existing database, so new columns have to arrive this way or a
- * deployment against a live Turso instance would silently keep the old shape
- * and fail on first query. SQLite has no `ADD COLUMN IF NOT EXISTS`, so a
- * duplicate-column error is the expected outcome on every run after the first
- * and is swallowed; anything else is re-thrown.
+ * deployment against a live database would silently keep the old shape and fail
+ * on first query. Postgres has `ADD COLUMN IF NOT EXISTS`, so unlike the SQLite
+ * original these are honestly idempotent rather than leaning on a swallowed
+ * duplicate-column error.
  */
 const MIGRATIONS = [
-  `ALTER TABLE signals ADD COLUMN occurred_at TEXT`,
-  `ALTER TABLE leads ADD COLUMN outcome TEXT NOT NULL DEFAULT 'none'`,
-  `ALTER TABLE leads ADD COLUMN outcome_at TEXT`,
-  `ALTER TABLE leads ADD COLUMN pushed_at TEXT`,
-  `ALTER TABLE leads ADD COLUMN push_result TEXT`,
-  `ALTER TABLE leads ADD COLUMN contact_key TEXT`,
-  `ALTER TABLE leads ADD COLUMN skip_reason TEXT`,
+  `ALTER TABLE signals ADD COLUMN IF NOT EXISTS occurred_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS outcome TEXT NOT NULL DEFAULT 'none'`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS outcome_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS pushed_at TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS push_result TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS contact_key TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS skip_reason TEXT`,
   // Must follow the ADD COLUMN above rather than sitting in SCHEMA: on an
   // existing database the column does not exist when SCHEMA runs, and indexing
   // a missing column fails the whole initialiser.
@@ -157,44 +159,53 @@ const MIGRATIONS = [
 ];
 
 export function isRemote(): boolean {
-  return Boolean(process.env.TURSO_DATABASE_URL);
+  return Boolean(connectionString());
 }
 
 /**
- * True when running on a serverless host with no hosted database configured.
- * Everything still works, but the file lives in the function's own /tmp: it is
- * not shared between concurrent invocations and is wiped on every cold start.
- * The UI says so rather than letting data appear to vanish at random.
+ * True when no database is configured at all. Nothing works in that state, so
+ * the UI names the missing variable rather than surfacing a connection error
+ * from whichever query happened to run first.
  */
-export function isEphemeral(): boolean {
-  return !isRemote() && Boolean(process.env.VERCEL);
+export function isUnconfigured(): boolean {
+  return !isRemote();
 }
 
-export async function db(): Promise<Client> {
+/**
+ * Two concurrent cold starts can run the initialiser at the same time, and
+ * Postgres resolves that race by failing one of them: `CREATE TABLE IF NOT
+ * EXISTS` still reaches for the same catalog rows, so the loser can see a
+ * duplicate-object or unique-violation error rather than a no-op. Both are
+ * benign here — the object exists either way, which is all the caller wanted.
+ */
+function isBenignRace(err: unknown): boolean {
+  const code = (err as { code?: string })?.code;
+  if (code === "42P07" || code === "42710" || code === "23505") return true;
+  return /already exists|duplicate key value/i.test(String(err));
+}
+
+export async function db(): Promise<NeonQueryFunction<false, true>> {
   if (client) return client;
   if (ready) return ready;
 
   ready = (async () => {
-    let pending: Client;
-    if (isRemote()) {
-      pending = createClient({
-        url: process.env.TURSO_DATABASE_URL!,
-        authToken: process.env.TURSO_AUTH_TOKEN,
-      });
-    } else {
-      // Only /tmp is writable on a serverless filesystem.
-      const path = isEphemeral() ? "/tmp/juniper.db" : LOCAL_PATH;
-      mkdirSync(dirname(path), { recursive: true });
-      pending = createClient({ url: `file:${path}` });
+    const url = connectionString();
+    if (!url) {
+      ready = null;
+      throw new Error(
+        "No database configured. Set DATABASE_URL to a Neon Postgres connection " +
+          "string (see README, Deployment).",
+      );
     }
 
+    const pending = neon(url, { fullResults: true });
+
     try {
-      for (const stmt of SCHEMA) await pending.execute(stmt);
-      for (const stmt of MIGRATIONS) {
+      for (const stmt of [...SCHEMA, ...MIGRATIONS]) {
         try {
-          await pending.execute(stmt);
+          await pending.query(stmt);
         } catch (err) {
-          if (!/duplicate column name/i.test(String(err))) throw err;
+          if (!isBenignRace(err)) throw err;
         }
       }
     } catch (err) {
@@ -223,14 +234,68 @@ const nstr = (v: unknown) => (v === null || v === undefined ? null : String(v));
 const num = (v: unknown) => Number(v);
 const nnum = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
-/** libsql rows are array-like; rebuild them as plain objects for React. */
-async function query(sql: string, args: InValue[] = []): Promise<Row[]> {
-  const res = await (await db()).execute({ sql, args });
-  return res.rows.map((r) => ({ ...r }) as Row);
+/**
+ * Every call site writes `?` placeholders, which is what SQLite took and what
+ * this codebase is written in; Postgres wants `$1`, `$2`. Rewriting ~50 query
+ * strings by hand would have been ~50 chances to misnumber one, so the
+ * translation lives here instead, where it is one function to get right.
+ *
+ * Quoted literals and `--` comments are skipped so a `?` inside either is left
+ * alone. Postgres doubles single quotes to escape them, and toggling twice on
+ * `''` lands in the same state, so that case needs no special handling.
+ */
+function toPositional(sql: string): string {
+  let out = "";
+  let n = 0;
+  let inString = false;
+  let inComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const c = sql[i];
+
+    if (inComment) {
+      out += c;
+      if (c === "\n") inComment = false;
+      continue;
+    }
+    if (!inString && c === "-" && sql[i + 1] === "-") {
+      inComment = true;
+      out += c;
+      continue;
+    }
+    if (c === "'") {
+      inString = !inString;
+      out += c;
+      continue;
+    }
+    if (c === "?" && !inString) {
+      out += `$${++n}`;
+      continue;
+    }
+    out += c;
+  }
+  return out;
 }
 
-async function run(sql: string, args: InValue[] = []) {
-  return (await db()).execute({ sql, args });
+/** `undefined` is not a wire value; the columns that receive it are nullable. */
+const toParams = (args: readonly unknown[]) =>
+  args.map((a) => (a === undefined ? null : a));
+
+async function query(sql: string, args: readonly unknown[] = []): Promise<Row[]> {
+  const res = await (await db()).query(toPositional(sql), toParams(args));
+  return res.rows as Row[];
+}
+
+/**
+ * Mirrors the shape the libsql driver returned, so the call sites that ask
+ * "did this change anything?" read exactly as they did before.
+ */
+async function run(
+  sql: string,
+  args: readonly unknown[] = [],
+): Promise<{ rowsAffected: number; rows: Row[] }> {
+  const res = await (await db()).query(toPositional(sql), toParams(args));
+  return { rowsAffected: res.rowCount ?? 0, rows: res.rows as Row[] };
 }
 
 // ---------------------------------------------------------------- profile

@@ -62,10 +62,13 @@ is recomputed on every read, so a lead visibly cools while it sits in the list.
 
 ```bash
 pnpm install
-cp .env.example .env      # add ANTHROPIC_API_KEY
-node scripts/seed.ts      # optional: demo profile + watchlist
+cp .env.example .env      # add ANTHROPIC_API_KEY and DATABASE_URL
+pnpm seed                 # optional: demo profile + watchlist
 pnpm dev
 ```
+
+`DATABASE_URL` is not optional — see [Deployment](#deployment) for creating the
+database and pointing local development at its own branch.
 
 Then open the app, go to **Setup**, paste your website, and hit **Analyse**.
 Add a few companies to the watchlist, then **Run pipeline** on the Signals tab.
@@ -322,27 +325,35 @@ Two environment variables are needed before it is fully functional:
 # Unlocks ICP inference, lead scoring, and message generation.
 vercel env add ANTHROPIC_API_KEY production
 
-# Persistent storage. Without these the deployment writes to the function's
-# own /tmp: not shared between concurrent requests, wiped on every cold start.
-vercel env add TURSO_DATABASE_URL production
-vercel env add TURSO_AUTH_TOKEN production
+# Storage. There is no fallback: Postgres has no embedded mode, so an unset
+# URL is a configuration error and every query says so.
+vercel env add DATABASE_URL production
 
 # Optional: enables the daily scheduled run in vercel.json.
 vercel env add CRON_SECRET production
 ```
 
-Schema changes ship as `ALTER TABLE` statements in `MIGRATIONS` (`src/lib/db.ts`)
-because `CREATE TABLE IF NOT EXISTS` is a no-op against a live database. They run
-on first connection and swallow only the duplicate-column error.
+Schema changes ship as `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` statements in
+`MIGRATIONS` (`src/lib/db.ts`) because `CREATE TABLE IF NOT EXISTS` is a no-op
+against a live database. They run on first connection, and only errors from two
+cold starts racing each other on the same catalog rows are swallowed.
 
-To create the database (requires a browser login, so run it yourself):
+To create the database:
 
 ```bash
-irm get.tur.so/install.ps1 | iex     # Windows; or: brew install tursodatabase/tap/turso
-turso auth signup
-turso db create juniper
-turso db show juniper --url          # -> TURSO_DATABASE_URL
-turso db tokens create juniper       # -> TURSO_AUTH_TOKEN
+npx neonctl auth                                   # browser login, once
+npx neonctl projects create --name juniper
+npx neonctl connection-string main --pooled        # -> DATABASE_URL
+```
+
+A Neon project created through Vercel's marketplace integration sets
+`POSTGRES_URL` instead, which is read as a fallback, so either route works.
+Branches are cheap and isolated, so local development points `DATABASE_URL` at a
+`dev` branch rather than sharing production's rows:
+
+```bash
+npx neonctl branches create --name dev
+npx neonctl connection-string dev                  # -> DATABASE_URL in .env
 ```
 
 Then `vercel deploy --prod` to pick up the new variables. The schema creates
@@ -367,9 +378,15 @@ verification degrades to 30%-confidence guesses rather than returning nothing.
 
 ## Stack
 
-Next.js 15 (App Router) · TypeScript · Tailwind v4 · libsql (`@libsql/client`)
-so the same schema runs against a local file in dev and hosted Turso in
-production · Claude Opus 5 via `@anthropic-ai/sdk`.
+Next.js 15 (App Router) · TypeScript · Tailwind v4 · Neon Postgres
+(`@neondatabase/serverless`) over its HTTP driver, because serverless
+invocations are short and unpooled and a per-request TCP handshake would cost
+more than the queries do · Claude Opus 5 via `@anthropic-ai/sdk`.
+
+Queries are written with `?` placeholders and translated to `$1`, `$2` inside
+the `query`/`run` helpers in `src/lib/db.ts`. That is one function to get right
+rather than a numbering mistake waiting in each of ~50 statements; it skips
+quoted literals and `--` comments so a `?` inside either survives.
 
 All three model-backed stages use structured outputs (`output_config.format`),
 so responses are schema-valid JSON — no regex extraction, no retry-on-parse.

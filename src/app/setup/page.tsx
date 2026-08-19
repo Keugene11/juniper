@@ -3,7 +3,7 @@ import { ProfileForm } from "@/components/profile-form";
 import { SuppressionManager } from "@/components/suppression-manager";
 import { WatchlistManager } from "@/components/watchlist-manager";
 import { PageHeader } from "@/components/ui";
-import { getProfile, isEphemeral, listSuppressions, listWatchlist } from "@/lib/db";
+import { getProfile, isUnconfigured, listSuppressions, listWatchlist } from "@/lib/db";
 import { enrichmentProviderStatus } from "@/lib/enrichment";
 import { outboundTargetStatus } from "@/lib/outbound";
 import { providerStatus } from "@/lib/signals/registry";
@@ -28,14 +28,14 @@ export default async function SetupPage() {
       />
 
       <div className="space-y-4">
-        {isEphemeral() && (
+        {isUnconfigured() && (
           <div className="card border-dashed p-4">
-            <p className="text-sm font-semibold">Storage is ephemeral</p>
+            <p className="text-sm font-semibold">No database configured</p>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              No hosted database is configured, so this deployment writes to the function&apos;s
-              own temporary disk. Data is not shared between concurrent requests and is wiped
-              on every cold start. Set <code className="rounded bg-wash px-1">TURSO_DATABASE_URL</code>{" "}
-              and <code className="rounded bg-wash px-1">TURSO_AUTH_TOKEN</code> to persist it.
+              Nothing can be saved or read until a database is reachable. Set{" "}
+              <code className="rounded bg-wash px-1">DATABASE_URL</code> to a Neon Postgres
+              connection string — every page on this tab will fail its first query until
+              you do.
             </p>
           </div>
         )}

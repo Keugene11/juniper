@@ -11,12 +11,12 @@
     "build": "node scripts/run-next.mjs build",
     "start": "node scripts/run-next.mjs start",
     "typecheck": "tsc --noEmit",
-    "seed": "node --disable-warning=ExperimentalWarning --import ./scripts/register-ts.mjs scripts/seed.ts",
-    "verify": "node --disable-warning=ExperimentalWarning --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts"
+    "seed": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/seed.ts",
+    "verify": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --use-system-ca --import ./scripts/register-ts.mjs scripts/verify.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.70.0",
-    "@libsql/client": "^0.17.4",
+    "@neondatabase/serverless": "^1.1.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.0",
     "react": "^19.0.0",
