@@ -31,9 +31,14 @@ export const simulatorProvider: SignalProvider = {
   id: "simulator",
   label: "Simulator",
   description:
-    "Seeded synthetic signals covering the person-level types (competitor engagement, job changes, event RSVPs) that no public API exposes.",
+    "Demo data. Invented companies and people, covering the person-level types (competitor engagement, job changes, event RSVPs) that no public API exposes. Off unless JUNIPER_ENABLE_SIMULATOR=1.",
   enabled: true,
-  requires: [],
+  // Gated through `requires` rather than a bespoke flag so the existing
+  // credential machinery does the work: `runnableProviders` drops it and the
+  // Setup tab still lists it, naming the variable that turns it on. Left on by
+  // default it was the largest producer in a run, and its fictional companies
+  // are indistinguishable from real leads once they reach the dashboard.
+  requires: ["JUNIPER_ENABLE_SIMULATOR"],
   kinds: KINDS,
 
   async fetch(ctx: ProviderContext): Promise<ProviderOutput> {

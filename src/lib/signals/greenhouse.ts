@@ -18,6 +18,15 @@ const RECENT_DAYS = 45;
 const SPIKE_THRESHOLD = 5;
 
 /**
+ * The board endpoint for a handle. Exported because `discovery.ts` probes this
+ * same URL to verify a proposed handle before storing it; sharing the builder
+ * is what stops verification and fetching from drifting onto different URLs.
+ */
+export function boardUrl(handle: string): string {
+  return `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(handle)}/jobs`;
+}
+
+/**
  * Greenhouse publishes every customer's job board as unauthenticated JSON.
  * A cluster of recently-opened roles is the cleanest public proxy for
  * "this team is growing and has budget" — the hiring-spike signal.
@@ -45,7 +54,7 @@ export const greenhouseProvider: SignalProvider = {
       let jobs: GreenhouseJob[];
       try {
         const res = await fetch(
-          `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(target.handle)}/jobs`,
+          boardUrl(target.handle),
           { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12_000) },
         );
         if (!res.ok) {

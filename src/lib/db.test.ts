@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { toPositional } from "./db";
+import { targetHost, toPositional } from "./db";
 
 // Every call site in the codebase writes `?` placeholders; Postgres wants $1.
 // One mistake here silently misbinds parameters across ~50 statements, so the
@@ -76,4 +76,33 @@ test("a ? inside a block comment is left alone", () => {
   const out = toPositional(sql);
   assert.ok(out.includes("$1"));
   assert.ok(!out.includes("$2"), "a block comment's ? must not consume a slot");
+});
+
+// Rows are tagged with this so a lead board only shows the leads collected for
+// the company currently being sold. If it is not stable across the ways the
+// same site can be written, a target silently orphans its own rows on the next
+// save and the board goes empty for no visible reason.
+
+test("the target key ignores scheme, www, path, and case", () => {
+  const expected = "wisprflow.ai";
+  for (const input of [
+    "https://wisprflow.ai",
+    "http://wisprflow.ai",
+    "https://www.wisprflow.ai",
+    "https://WisprFlow.ai/",
+    "https://wisprflow.ai/pricing",
+    "wisprflow.ai",
+    "www.wisprflow.ai",
+    "  WISPRFLOW.AI  ",
+  ]) {
+    assert.equal(targetHost(input), expected, `${input} produced a different target`);
+  }
+});
+
+test("different companies get different targets", () => {
+  assert.notEqual(targetHost("https://wisprflow.ai"), targetHost("https://ramp.com"));
+});
+
+test("a port is part of the identity, since it is a different host", () => {
+  assert.equal(targetHost("http://localhost:3000"), "localhost:3000");
 });

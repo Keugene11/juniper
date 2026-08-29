@@ -9,6 +9,7 @@ import {
   query,
   run,
   str,
+  targetHost,
 } from "./db";
 import {
   contactKey,
@@ -154,6 +155,11 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
   const profile = await getProfile();
   if (!profile) throw new MissingProfileError();
 
+  // Everything this run writes is tagged with the company being sold for, so
+  // re-pointing Juniper at a different website gives a clean board instead of
+  // the previous target's leads.
+  const target = targetHost(profile.website);
+
   const started = Date.now();
   const deadline = started + DEFAULT_BUDGET_MS;
   const runRes = await run("INSERT INTO runs (started_at) VALUES (?) RETURNING id", [now()]);
@@ -213,7 +219,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
     stats.signalsFiltered = found.length - selected.length;
 
     const fresh: Signal[] = [];
-    for (const s of selected) if (await persistSignal(s)) fresh.push(s);
+    for (const s of selected) if (await persistSignal(s, target)) fresh.push(s);
     stats.signalsNew = fresh.length;
 
     // 2. Score -------------------------------------------------------------
@@ -230,8 +236,8 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
         `INSERT INTO leads
            (signal_id, company, domain, person_name, person_title,
             fit_score, intent_score, total_score, rationale, disqualified, status,
-            contact_key, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            contact_key, created_at, target)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(signal_id) DO UPDATE SET
            fit_score = excluded.fit_score,
            intent_score = excluded.intent_score,
@@ -259,6 +265,7 @@ export async function runPipeline(opts: RunOptions = {}): Promise<RunStats> {
             personName: s.signal.personName,
           }),
           now(),
+          target,
         ],
       );
     }
@@ -744,12 +751,12 @@ async function recordSkip(dedupeKey: string, reason: string): Promise<void> {
 // ------------------------------------------------------------------ helpers
 
 /** Returns true when the signal was new (the insert was not a dedupe collision). */
-async function persistSignal(s: Signal): Promise<boolean> {
+async function persistSignal(s: Signal, target: string): Promise<boolean> {
   const res = await run(
     `INSERT INTO signals
        (provider, kind, company, domain, person_name, person_title,
-        headline, evidence, url, strength, detected_at, occurred_at, dedupe_key)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        headline, evidence, url, strength, detected_at, occurred_at, dedupe_key, target)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (dedupe_key) DO NOTHING`,
     [
       s.provider,
@@ -767,6 +774,7 @@ async function persistSignal(s: Signal): Promise<boolean> {
       s.detectedAt,
       s.occurredAt,
       s.dedupeKey,
+      target,
     ],
   );
   return Number(res.rowsAffected) > 0;
@@ -895,14 +903,31 @@ export async function setLeadOutcome(id: number, outcome: LeadOutcome): Promise<
   return Number(res.rowsAffected) > 0;
 }
 
+/**
+ * The lead board, scoped to the company currently being sold for.
+ *
+ * The scope is not cosmetic: leads collected against a previous ICP are not
+ * leads for this one, and showing them was a large part of why changing the
+ * target website appeared to change nothing at all.
+ */
 export async function listLeads(
   opts: { includeDisqualified?: boolean } = {},
 ): Promise<LeadView[]> {
+  const profile = await getProfile();
+  // No profile means no board to scope to, and the callers that reach here
+  // without one are diagnostics rather than the dashboard.
+  const target = profile ? targetHost(profile.website) : null;
+
+  const where = [
+    ...(opts.includeDisqualified ? [] : ["l.disqualified = 0"]),
+    ...(target ? ["l.target = ?"] : []),
+  ];
   const rows = await query(
     `SELECT l.*, s.provider, s.kind, s.headline, s.evidence, s.url, s.detected_at, s.occurred_at
      FROM leads l JOIN signals s ON s.id = l.signal_id
-     ${opts.includeDisqualified ? "" : "WHERE l.disqualified = 0"}
+     ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
      ORDER BY l.total_score DESC, l.created_at DESC`,
+    target ? [target] : [],
   );
   const messages = await query("SELECT * FROM messages ORDER BY lead_id, step");
 
@@ -972,11 +997,15 @@ export interface SignalFeedRow {
 }
 
 export async function listSignalFeed(limit = 60): Promise<SignalFeedRow[]> {
+  const profile = await getProfile();
+  const target = profile ? targetHost(profile.website) : null;
+
   const rows = await query(
     `SELECT s.*, l.total_score, l.disqualified
      FROM signals s LEFT JOIN leads l ON l.signal_id = s.id
+     ${target ? "WHERE s.target = ?" : ""}
      ORDER BY COALESCE(s.occurred_at, s.detected_at) DESC LIMIT ?`,
-    [limit],
+    target ? [target, limit] : [limit],
   );
 
   return rows.map((r) => ({

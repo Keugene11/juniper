@@ -30,8 +30,9 @@ export function TargetBar({ profile }: { profile: Profile }) {
         </div>
         <ProfileForm initial={profile} />
         <p className="mt-2 text-xs leading-relaxed text-muted">
-          Analysing a new site replaces the ICP everything is scored against. Your watchlist and
-          existing leads stay as they are.
+          Analysing a new site replaces the ICP everything is scored against, and rebuilds the
+          watchlist with companies that match it. Leads already collected stay in the database
+          but leave this board — they belong to the target they were found for.
         </p>
       </div>
     );

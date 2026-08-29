@@ -21,6 +21,14 @@ const RECENT_DAYS = 45;
 // Activity tab would be averaging two different definitions together.
 const SPIKE_THRESHOLD = 5;
 
+/**
+ * The postings endpoint for a handle. Exported so `discovery.ts` verifies a
+ * proposed handle against the exact URL this provider will later fetch.
+ */
+export function boardUrl(handle: string): string {
+  return `https://api.lever.co/v0/postings/${encodeURIComponent(handle)}?mode=json`;
+}
+
 /** Same hiring-spike logic as Greenhouse, against Lever's public postings API. */
 export const leverProvider: SignalProvider = {
   id: "lever",
@@ -44,7 +52,7 @@ export const leverProvider: SignalProvider = {
       let postings: LeverPosting[];
       try {
         const res = await fetch(
-          `https://api.lever.co/v0/postings/${encodeURIComponent(target.handle)}?mode=json`,
+          boardUrl(target.handle),
           { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12_000) },
         );
         if (!res.ok) {

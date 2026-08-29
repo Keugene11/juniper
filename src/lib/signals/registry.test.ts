@@ -9,7 +9,7 @@ import { SIGNAL_KINDS } from "./types";
 
 const saved = { ...process.env };
 afterEach(() => {
-  for (const k of ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "CRUNCHBASE_API_KEY", "UNIPILE_DSN", "UNIPILE_API_KEY"]) {
+  for (const k of ["REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET", "CRUNCHBASE_API_KEY", "UNIPILE_DSN", "UNIPILE_API_KEY", "JUNIPER_ENABLE_SIMULATOR"]) {
     if (saved[k] === undefined) delete process.env[k];
     else process.env[k] = saved[k];
   }
@@ -50,11 +50,29 @@ test("configuring a source makes it runnable", () => {
 });
 
 test("the free sources need no credentials", () => {
-  for (const id of ["greenhouse", "lever", "ashby", "hackernews", "simulator"]) {
+  for (const id of ["greenhouse", "lever", "ashby", "hackernews"]) {
     const p = byId(id);
     assert.equal(p.configured, true, `${id} should need no credentials`);
     assert.deepEqual(p.missing, [], `${id} reported missing secrets`);
   }
+});
+
+test("the simulator is off unless explicitly switched on", () => {
+  // It invents companies and people. Left runnable by default it was the
+  // largest producer in a run, and nothing on the dashboard distinguished
+  // "Auralis Software" from a real prospect.
+  delete process.env.JUNIPER_ENABLE_SIMULATOR;
+  const sim = byId("simulator");
+  assert.ok(sim, "it must stay listed, so demo data is visibly available");
+  assert.equal(sim.configured, false);
+  assert.deepEqual(sim.missing, ["JUNIPER_ENABLE_SIMULATOR"]);
+  assert.ok(
+    !runnableProviders().some((p) => p.id === "simulator"),
+    "a default run must not be able to fabricate companies",
+  );
+
+  process.env.JUNIPER_ENABLE_SIMULATOR = "1";
+  assert.ok(runnableProviders().some((p) => p.id === "simulator"));
 });
 
 test("the linkedin stub is listed but disabled", () => {

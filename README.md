@@ -63,22 +63,29 @@ is recomputed on every read, so a lead visibly cools while it sits in the list.
 ```bash
 pnpm install
 cp .env.example .env      # add ANTHROPIC_API_KEY and DATABASE_URL
-pnpm seed                 # optional: demo profile + watchlist
+pnpm seed                 # optional: placeholder profile, no API key needed
 pnpm dev
 ```
 
 `DATABASE_URL` is not optional — see [Deployment](#deployment) for creating the
 database and pointing local development at its own branch.
 
-Then open the app, go to **Setup**, paste your website, and hit **Analyse**.
-Add a few companies to the watchlist, then **Run pipeline** on the Signals tab.
+Then open the app, go to **Setup**, paste your website, and hit **Analyse**. That
+infers your ICP from the site and then rebuilds the watchlist with real companies
+matching it — every board handle checked against the live ATS before it is
+stored, so an entry on the list is one that actually answers. Add or remove
+companies by hand if you want, then **Run pipeline** on the Signals tab.
 
 Without an Anthropic key, ingestion still works and persists signals — stages 1,
 3, and 5 return a clear error instead of failing silently.
 
 ## Signal sources
 
-Real, watchlist-driven:
+Real, watchlist-driven. The watchlist is derived from your ICP by
+`src/lib/discovery.ts` rather than being typed in from scratch — there is no
+public index of "every company on Greenhouse" to search, so the companies are
+proposed from your profile and then each handle is verified against the live
+board. Proposals that no board recognises are dropped rather than stored:
 
 - **Greenhouse** — public job-board JSON. 5+ roles opened in 45 days is a
   hiring spike; fewer are individual role signals. (Verified live: Figma 161
@@ -97,12 +104,14 @@ Real, keyword-driven:
   infrastructure ICPs; it will be quiet for most other categories, and quiet is
   the correct answer rather than noise.
 
-Synthetic:
+Synthetic, and off by default:
 
-- **Simulator** — seeded on the day, so re-running is idempotent. It exists to
-  cover the *person-level* signal types no public API exposes (competitor
-  engagement, job changes) so stages 3–5 can be exercised end to end. Its
-  companies are not real; it says so in its own run warnings.
+- **Simulator** — invents companies and people to cover the *person-level*
+  signal types no public API exposes (competitor engagement, job changes), so
+  stages 3–5 can be exercised end to end without a paid data provider. Seeded on
+  the day, so re-running is idempotent. It requires `JUNIPER_ENABLE_SIMULATOR=1`:
+  while it ran by default it was the largest producer in a run, and nothing on
+  the dashboard distinguished "Auralis Software" from a real prospect.
 
 Real, credential-gated. These stay listed on the Setup tab when unconfigured and
 name the variable they want, because a source that silently vanished would be
@@ -407,7 +416,7 @@ call rather than surfacing as an error.
 |---------|---------|
 | `pnpm dev` / `build` / `start` | Next, with the system CA store trusted |
 | `pnpm typecheck` | `tsc --noEmit` |
-| `node scripts/seed.ts` | Demo profile + watchlist, no API key needed |
+| `pnpm seed` | Placeholder profile, no API key needed (`-- --demo` also adds demo boards) |
 | `pnpm verify` | Exercises every non-AI stage against the live upstreams |
 
 ## Limits
@@ -417,7 +426,9 @@ call rather than surfacing as an error.
 - Scoring quality is bounded by ICP quality. Re-run the website analysis after
   editing your positioning.
 - The Greenhouse, Lever, and Ashby providers need board handles; there is no
-  public index of which companies use them, which is why the watchlist is manual.
+  public index of which companies use them, which is why the watchlist is built by
+  proposing companies from your ICP and then verifying each handle against the
+  live board rather than by searching.
 - The gate can only dedupe what it can identify. A signal with no domain, no
   person, and no address yields no contact key and is let through — it is still
   a real lead, and there is nothing for it to collide with.

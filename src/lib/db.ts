@@ -134,6 +134,22 @@ const MIGRATIONS = [
   // existing database the column does not exist when SCHEMA runs, and indexing
   // a missing column fails the whole initialiser.
   `CREATE INDEX IF NOT EXISTS idx_leads_contact ON leads(contact_key)`,
+  // Which targeting profile a row belongs to, as the bare host of the
+  // profile website. Without it every lead ever produced showed on every
+  // board, so re-pointing the tool at a new company still displayed the
+  // previous one's prospects and made it look as though nothing had changed.
+  //
+  // Existing rows are backfilled to 'legacy' rather than to the current
+  // profile: they were collected against whatever ICP was in place at the
+  // time, and relabelling them as the current target's is precisely the
+  // confusion this column exists to remove. 'legacy' matches no real host,
+  // so they drop out of every board without being destroyed.
+  `ALTER TABLE signals ADD COLUMN IF NOT EXISTS target TEXT`,
+  `ALTER TABLE leads ADD COLUMN IF NOT EXISTS target TEXT`,
+  `UPDATE signals SET target = 'legacy' WHERE target IS NULL`,
+  `UPDATE leads SET target = 'legacy' WHERE target IS NULL`,
+  `CREATE INDEX IF NOT EXISTS idx_leads_target ON leads(target)`,
+  `CREATE INDEX IF NOT EXISTS idx_signals_target ON signals(target)`,
   // Backfill identities for leads that predate the column. Without this the
   // first run after upgrading would happily re-sequence everyone contacted
   // before it, because none of them would match a contact key.
@@ -337,6 +353,25 @@ export interface Profile {
   updatedAt: string;
 }
 
+/**
+ * The key rows are tagged with, so a lead board only ever shows the leads
+ * collected for the company currently being sold. Bare host, lowercased:
+ * stable across http/https and a stray `www.`, which a raw website string is
+ * not — and a target that changed spelling would silently orphan its own rows.
+ */
+export function targetHost(website: string): string {
+  try {
+    return new URL(website).host.replace(/^www\./, "").toLowerCase();
+  } catch {
+    return website
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/\/.*$/, "");
+  }
+}
+
 export async function getProfile(): Promise<Profile | null> {
   const rows = await query("SELECT * FROM profile WHERE id = 1");
   if (rows.length === 0) return null;
@@ -397,6 +432,16 @@ export async function addWatchlistEntry(e: Omit<WatchlistEntry, "id">): Promise<
 
 export async function removeWatchlistEntry(id: number): Promise<void> {
   await run("DELETE FROM watchlist WHERE id = ?", [id]);
+}
+
+/**
+ * Empties the watchlist. Used when discovery re-derives it for a new target:
+ * the previous company's prospects are not this one's, and leaving them in
+ * place is what made every run return the same companies no matter which
+ * website the profile was inferred from.
+ */
+export async function clearWatchlist(): Promise<void> {
+  await run("DELETE FROM watchlist");
 }
 
 // ------------------------------------------------------------ suppressions

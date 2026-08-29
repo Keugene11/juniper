@@ -9,12 +9,23 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
   const router = useRouter();
   const [website, setWebsite] = useState(initial?.website ?? "");
   const [busy, setBusy] = useState(false);
+  const [stage, setStage] = useState<"idle" | "reading" | "finding">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(initial);
 
+  /**
+   * Two requests, not one. Reading the site and rebuilding the watchlist from
+   * what it says are each a crawl or a model call, and bundling them would put
+   * a single request past the serverless ceiling. They are also reported
+   * separately, so a discovery failure does not read as though the analysis
+   * itself was lost.
+   */
   async function infer() {
     setBusy(true);
+    setStage("reading");
     setError(null);
+    setNotice(null);
     try {
       const res = await fetch("/api/profile", {
         method: "POST",
@@ -24,11 +35,31 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? `Request failed (${res.status})`);
       setProfile(body.profile as Profile);
+
+      // A new target means new prospects, so the previous target's watchlist is
+      // replaced rather than added to. Keeping it is what made every run return
+      // the same companies no matter which website was analysed.
+      setStage("finding");
+      const disc = await fetch("/api/watchlist/discover", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ replace: true }),
+      });
+      const found = await disc.json();
+      if (!disc.ok) {
+        setError(
+          `Profile saved, but finding companies failed: ${found.error ?? disc.status}. ` +
+            `Retry from the Watchlist section below.`,
+        );
+      } else {
+        setNotice(describeDiscovery(found.added?.length ?? 0, found.rejected?.length ?? 0));
+      }
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
+      setStage("idle");
     }
   }
 
@@ -37,7 +68,8 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
       <h2 className="text-sm font-medium">Your targeting profile</h2>
       <p className="mt-1 text-xs leading-relaxed text-muted">
         Paste your site. It gets crawled and read to work out what you sell, who buys it, and
-        which public phrases to watch for.
+        which public phrases to watch for — then the watchlist is rebuilt with real companies
+        that match.
       </p>
 
       <div className="mt-3 flex flex-col gap-2 sm:flex-row">
@@ -55,7 +87,13 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
           className="press flex items-center justify-center gap-2 btn-primary px-4 py-2.5 text-sm"
         >
           {busy ? <Loader2 size={15} className="spinning" /> : <Wand2 size={15} />}
-          {busy ? "Reading site" : profile ? "Re-analyse" : "Analyse"}
+          {stage === "reading"
+            ? "Reading site"
+            : stage === "finding"
+              ? "Finding companies"
+              : profile
+                ? "Re-analyse"
+                : "Analyse"}
         </button>
       </div>
 
@@ -64,6 +102,10 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
           <AlertCircle size={14} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
+      )}
+
+      {notice && !error && (
+        <p className="mt-3 text-xs leading-relaxed text-muted">{notice}</p>
       )}
 
       {profile && (
@@ -82,6 +124,21 @@ export function ProfileForm({ initial }: { initial: Profile | null }) {
       )}
     </section>
   );
+}
+
+/**
+ * Names the rejects as well as the keeps. A proposed company whose handle
+ * matched no live job board is dropped rather than stored, and saying so is
+ * what distinguishes "the ICP is too narrow" from "the model guessed badly".
+ */
+function describeDiscovery(added: number, rejected: number): string {
+  if (added === 0) {
+    return "No companies with a live job board matched this ICP. Add board handles by hand in the Watchlist section below.";
+  }
+  const kept = `Watchlist rebuilt: ${added} ${added === 1 ? "company" : "companies"} with a verified job board`;
+  return rejected === 0
+    ? `${kept}.`
+    : `${kept}, ${rejected} dropped for having no board that answered.`;
 }
 
 function IcpList({ label, items }: { label: string; items: string[] }) {

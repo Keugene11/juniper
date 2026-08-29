@@ -21,6 +21,14 @@ const RECENT_DAYS = 45;
 const SPIKE_THRESHOLD = 5;
 
 /**
+ * The job-board endpoint for a handle. Exported so `discovery.ts` verifies a
+ * proposed handle against the exact URL this provider will later fetch.
+ */
+export function boardUrl(handle: string): string {
+  return `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(handle)}`;
+}
+
+/**
  * Ashby's posting API, the third public job board worth watching alongside
  * Greenhouse and Lever. It matters because ATS choice correlates with company
  * age: a lot of the companies founded in the last five years — exactly the
@@ -53,7 +61,7 @@ export const ashbyProvider: SignalProvider = {
       let jobs: AshbyJob[];
       try {
         const res = await fetch(
-          `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(target.handle)}`,
+          boardUrl(target.handle),
           { headers: { accept: "application/json" }, signal: AbortSignal.timeout(12_000) },
         );
         if (!res.ok) {

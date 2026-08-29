@@ -59,6 +59,7 @@ export const hackerNewsProvider: SignalProvider = {
     const since = Math.floor(Date.now() / 1000) - RECENT_DAYS * 86_400;
     const terms = ctx.keywords.slice(0, 6);
     let rejected = 0;
+    let unattributed = 0;
 
     for (const keyword of terms) {
       let hits: HnHit[];
@@ -92,6 +93,18 @@ export const hackerNewsProvider: SignalProvider = {
         seen.add(hit.objectID);
 
         const domain = hostOf(hit.url);
+        // A story linking to a news site or a blog host tells you nothing about
+        // that publisher as a prospect: it is the subject of the article, not
+        // its host, that has the pain point. These are the dangerous ones —
+        // unlike a text post, a publisher hands over a plausible-looking domain,
+        // so it cleared enrichment and got a sequence written to someone at the
+        // New York Times. Text posts are deliberately left alone: they carry no
+        // domain, so they already stop before the waterfall, and an Ask HN
+        // describing a problem out loud is the strongest thing this source has.
+        if (domain && isPublisher(domain)) {
+          unattributed++;
+          continue;
+        }
         signals.push({
           provider: "hackernews",
           kind: classify(hit.title, Boolean(domain)),
@@ -115,13 +128,20 @@ export const hackerNewsProvider: SignalProvider = {
       }
     }
 
+    const notes = [
+      rejected ? `${rejected} loose keyword matches below the relevance floor` : null,
+      unattributed
+        ? `${unattributed} linking to a publisher rather than a prospect`
+        : null,
+    ].filter((n): n is string => n !== null);
+
     if (signals.length === 0) {
       warnings.push(
         `no relevant stories in the last ${RECENT_DAYS} days across ${terms.length} watch terms` +
-          (rejected ? ` (${rejected} loose keyword matches rejected)` : ""),
+          (notes.length ? ` (rejected ${notes.join("; ")})` : ""),
       );
-    } else if (rejected) {
-      warnings.push(`rejected ${rejected} loose keyword matches below the relevance floor`);
+    } else if (notes.length) {
+      warnings.push(`rejected ${notes.join("; ")}`);
     }
 
     return { signals, warnings };
@@ -171,3 +191,38 @@ function prettyCompany(domain: string): string {
 }
 
 const stripTags = (s: string) => s.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Domains that host other people's writing rather than sell anything.
+ *
+ * A hit on one of these is press, documentation, or a personal blog post: the
+ * company worth prospecting is whoever the article is *about*, which is not
+ * something a hostname can tell you. Naming the host instead put publishers on
+ * the lead board, which is both useless and embarrassing to send.
+ *
+ * Suffix-matched so subdomains are covered — `eng.company.medium.com` and
+ * `gist.github.com` are the same case as their parents.
+ */
+function isPublisher(domain: string): boolean {
+  return PUBLISHER_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`));
+}
+
+const PUBLISHER_DOMAINS = [
+  // Code and content hosts
+  "github.com", "gitlab.com", "gist.github.com", "sourceforge.net", "codeberg.org",
+  "medium.com", "substack.com", "wordpress.com", "blogspot.com", "ghost.io",
+  "dev.to", "hashnode.dev", "notion.site", "wixsite.com", "squarespace.com",
+  // Aggregators, forums, and social
+  "news.ycombinator.com", "reddit.com", "x.com", "twitter.com", "youtube.com",
+  "youtu.be", "linkedin.com", "facebook.com", "lobste.rs", "stackoverflow.com",
+  "quora.com", "producthunt.com", "archive.org", "web.archive.org",
+  // Press and trade
+  "nytimes.com", "wsj.com", "ft.com", "bloomberg.com", "reuters.com", "bbc.co.uk",
+  "bbc.com", "theguardian.com", "washingtonpost.com", "cnbc.com", "forbes.com",
+  "businessinsider.com", "techcrunch.com", "theverge.com", "wired.com", "arstechnica.com",
+  "venturebeat.com", "zdnet.com", "engadget.com", "theinformation.com", "axios.com",
+  "economist.com", "vice.com", "cnn.com", "npr.org", "apnews.com",
+  // Reference and preprints
+  "wikipedia.org", "arxiv.org", "doi.org", "acm.org", "ieee.org", "nature.com",
+  "sciencedirect.com", "papers.ssrn.com", "biorxiv.org",
+];

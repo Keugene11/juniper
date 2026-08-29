@@ -160,3 +160,43 @@ test("a story with no title is skipped rather than producing an empty signal", a
   const out = await hackerNewsProvider.fetch(ctx(["issue tracker"]));
   assert.equal(out.signals.length, 0);
 });
+
+test("a link to a publisher is not a lead", async () => {
+  // The host of an article is not the company with the problem. These were the
+  // dangerous rejects: unlike a text post, a publisher hands over a
+  // plausible-looking domain, so it cleared enrichment and a sequence was
+  // written to someone at the New York Times.
+  stubHits([
+    hit({
+      objectID: "90",
+      title: "Issue tracker startups are eating Jira",
+      url: "https://www.nytimes.com/2026/03/01/tech/issue-tracker.html",
+    }),
+  ]);
+  const out = await hackerNewsProvider.fetch(ctx(["issue tracker"]));
+  assert.equal(out.signals.length, 0);
+  assert.match(out.warnings.join(" "), /publisher/, "the reason must be reported");
+});
+
+test("code and social hosts are publishers too, subdomains included", async () => {
+  stubHits([
+    hit({ objectID: "91", title: "An issue tracker in Rust", url: "https://gist.github.com/x" }),
+    hit({ objectID: "92", title: "An issue tracker demo", url: "https://youtu.be/abc" }),
+  ]);
+  const out = await hackerNewsProvider.fetch(ctx(["issue tracker"]));
+  assert.equal(out.signals.length, 0);
+});
+
+test("an ordinary company's own site still becomes a signal", async () => {
+  // The filter must not swallow the case it exists to protect.
+  stubHits([
+    hit({
+      objectID: "93",
+      title: "Why our issue tracker had to change",
+      url: "https://engineering.acmecorp.com/post",
+    }),
+  ]);
+  const out = await hackerNewsProvider.fetch(ctx(["issue tracker"]));
+  assert.equal(out.signals.length, 1);
+  assert.equal(out.signals[0].domain, "engineering.acmecorp.com");
+});
